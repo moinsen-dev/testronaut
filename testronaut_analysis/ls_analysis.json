@@ -1,0 +1,9 @@
+{
+  "name": "/bin/ls",
+  "version": "CHANGELOG.md\nCONTRIBUTING.md\nLICENSE\nNEXT_STEPS.md\nPRD-AI-CLI-Testing-2025-03-24.md\nREADME.md\nUSER-IDEA.md\nci\ndiagrams\ndocs\nfeatures\nhtmlcov\nimages\nmemory-bank\nmigrations\nmkdocs.yml\npyproject.toml\npytest.ini\nsetup.sh\nsrc\ntest_components.py\ntestronaut_analysis\ntests\nuv.lock",
+  "help_text": "CHANGELOG.md\nCONTRIBUTING.md\nLICENSE\nNEXT_STEPS.md\nPRD-AI-CLI-Testing-2025-03-24.md\nREADME.md\nUSER-IDEA.md\nci\ndiagrams\ndocs\nfeatures\nhtmlcov\nimages\nmemory-bank\nmigrations\nmkdocs.yml\npyproject.toml\npytest.ini\nsetup.sh\nsrc\ntest_components.py\ntestronaut_analysis\ntests\nuv.lock\n",
+  "created_at": "2025-03-24T15:16:25.956509",
+  "updated_at": null,
+  "install_command": null,
+  "description": null
+}

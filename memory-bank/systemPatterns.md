@@ -2,7 +2,7 @@
 
 ## Architecture Overview
 
-Testronaut follows a modular architecture with clearly defined components and interfaces. The system is designed as a command-line application with several interconnected components that handle different aspects of the testing process.
+Testronaut follows a domain-driven design approach with clear separation of concerns. The architecture is structured around a modular core with well-defined interfaces between components.
 
 ```mermaid
 graph TD
@@ -54,6 +54,292 @@ graph TD
     ResultVerifier --> FS
 
     ResultVerifier --> CLI
+```
+
+## Data Model
+
+The core data model is structured around CLI tools, commands, test plans, and results.
+
+```mermaid
+erDiagram
+    CLITool ||--o{ Command : has
+    Command ||--o{ Option : has
+    Command ||--o{ Argument : has
+
+    CLITool ||--o{ TestPlan : has
+    TestPlan ||--o{ TestCase : contains
+    TestCase ||--o{ TestResult : produces
+    TestCase }|--|| Command : tests
+
+    TestPlan ||--o{ TestReport : generates
+    TestResult }|--o{ TestReport : includes
+```
+
+## Core Design Patterns
+
+### Domain-Driven Design (DDD)
+
+The application is structured around the core domain of CLI testing:
+
+1. **Domain Layer**: Contains the business logic and entities
+   - CLI tool analysis
+   - Test plan generation
+   - Test execution
+   - Result verification
+
+2. **Application Layer**: Coordinates activities
+   - Use cases for each major operation
+   - Service orchestration
+   - Event handling
+
+3. **Infrastructure Layer**: Provides technical capabilities
+   - Database access
+   - Docker integration
+   - LLM service connections
+   - File system operations
+
+4. **Interface Layer**: User interaction
+   - CLI interface
+   - API endpoints (future)
+   - Reporting interface
+
+### Repository Pattern
+
+The application uses the repository pattern to abstract data access:
+
+```python
+# Abstract repository
+class TestPlanRepository(Protocol):
+    def get(self, id: str) -> TestPlan:
+        ...
+
+    def save(self, test_plan: TestPlan) -> str:
+        ...
+
+    def list(self, filter_criteria: dict) -> List[TestPlan]:
+        ...
+
+# Concrete implementation
+class SQLiteTestPlanRepository:
+    def __init__(self, session_factory: SessionFactory):
+        self.session_factory = session_factory
+
+    def get(self, id: str) -> TestPlan:
+        with self.session_factory() as session:
+            return session.query(TestPlan).filter(TestPlan.id == id).first()
+
+    # More implementation details...
+```
+
+### Factory Pattern
+
+Factory classes are used to create components with proper dependencies:
+
+```python
+class AnalyzerFactory:
+    def __init__(self, config: Config, llm_service: LLMService):
+        self.config = config
+        self.llm_service = llm_service
+
+    def create(self) -> Analyzer:
+        # Create and return configured analyzer instance
+        return ConcreteAnalyzer(
+            llm_service=self.llm_service,
+            parser_config=self.config.parser
+        )
+```
+
+### Strategy Pattern
+
+Different strategies are used for various operations, such as different LLM providers:
+
+```python
+class LLMStrategy(Protocol):
+    def generate_completion(self, prompt: str) -> str:
+        ...
+
+class OpenAIStrategy:
+    def generate_completion(self, prompt: str) -> str:
+        # Implementation for OpenAI
+
+class AnthropicStrategy:
+    def generate_completion(self, prompt: str) -> str:
+        # Implementation for Anthropic
+```
+
+### Dependency Injection
+
+Dependencies are injected rather than created directly:
+
+```python
+class TestExecutor:
+    def __init__(
+        self,
+        docker_service: DockerService,
+        file_system: FileSystem,
+        test_plan_repository: TestPlanRepository
+    ):
+        self.docker_service = docker_service
+        self.file_system = file_system
+        self.test_plan_repository = test_plan_repository
+
+    # Implementation details...
+```
+
+## Component Architecture
+
+### Core Components
+
+1. **Data Models (Phase 003)**
+   ```
+   models/
+   ├── base.py             # Base model classes and utilities
+   ├── cli_tool.py         # CLI tool and command models
+   ├── test_plan.py        # Test plan and test case models
+   ├── test_result.py      # Test execution result models
+   └── test_report.py      # Test report and analysis models
+   ```
+
+2. **Component Interfaces (Phase 003)**
+   ```
+   interfaces/
+   ├── analyzer.py         # CLI analysis interface
+   ├── generator.py        # Test generation interface
+   ├── executor.py         # Test execution interface
+   ├── verifier.py         # Result verification interface
+   └── reporter.py         # Report generation interface
+   ```
+
+3. **Error Handling and Logging (Phase 003)**
+   ```
+   utils/
+   ├── errors.py           # Custom exceptions and error handlers
+   ├── logging.py          # Logging configuration and utilities
+   ├── validation.py       # Input validation utilities
+   └── monitoring.py       # Performance and health monitoring
+   ```
+
+### Core Interfaces
+
+The system uses Python Protocol classes for interface definitions:
+
+```python
+# Example interface definition
+from typing import Protocol, List
+
+class Analyzer(Protocol):
+    def analyze_cli_tool(self, tool_name: str, include_examples: bool = True) -> CLITool:
+        """
+        Analyze a CLI tool and extract its command structure
+
+        Args:
+            tool_name: Name of the CLI tool to analyze
+            include_examples: Whether to extract examples from help text
+
+        Returns:
+            Structured representation of the CLI tool
+        """
+        ...
+
+    def update_command_info(self, command: Command) -> Command:
+        """
+        Update information for a specific command
+
+        Args:
+            command: Command to update
+
+        Returns:
+            Updated command with additional information
+        """
+        ...
+```
+
+### Error Handling System
+
+The application uses a structured exception hierarchy:
+
+```
+TestronautError (base exception)
+├── ConfigurationError
+│   ├── MissingConfigError
+│   └── InvalidConfigError
+├── ValidationError
+│   ├── InvalidInputError
+│   └── SchemaValidationError
+├── ExecutionError
+│   ├── CommandExecutionError
+│   ├── DockerError
+│   └── TimeoutError
+├── VerificationError
+│   ├── ResultMismatchError
+│   └── SemanticComparisonError
+└── ConnectivityError
+    ├── DatabaseError
+    ├── LLMServiceError
+    └── FileSystemError
+```
+
+### Logging System
+
+The application uses structured logging with context:
+
+```python
+# Example logging usage
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+def process_test_plan(test_plan_id: str) -> None:
+    logger.info("Processing test plan", test_plan_id=test_plan_id)
+
+    try:
+        # Processing logic
+        logger.debug("Test plan loaded", test_case_count=len(test_plan.test_cases))
+    except Exception as e:
+        logger.error("Test plan processing failed", error=str(e), exc_info=True)
+```
+
+## Workflow Patterns
+
+The system follows a sequential workflow pattern, as illustrated in the sequence diagram:
+
+1. **Analysis Phase**: Extract and understand CLI tool structure
+2. **Generation Phase**: Create comprehensive test plans
+3. **Execution Phase**: Run tests in isolated containers
+4. **Verification Phase**: Compare results using semantic matching
+5. **Reporting Phase**: Generate detailed test reports
+
+This workflow supports both manual interventions and fully automated test cycles.
+
+## Deployment Model
+
+The application is deployed as a self-contained Python package that manages Docker containers:
+
+```mermaid
+graph TD
+    subgraph Host[Host Machine]
+        App[Testronaut Application]
+        DB[(SQLite Database)]
+        FS[File System]
+        DockerService[Docker Service]
+    end
+
+    subgraph DockerEnvironment[Docker Environment]
+        Network[Internal Docker Network]
+
+        subgraph TestContainer1[Test Container 1]
+            CLITool1[CLI Tool Instance]
+        end
+    end
+
+    subgraph ExternalServices[External Services]
+        CloudLLM[Cloud LLM API]
+    end
+
+    App --> DB
+    App --> FS
+    App --> DockerService
+    App --> CloudLLM
 ```
 
 ## Key Design Patterns

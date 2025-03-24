@@ -2,56 +2,77 @@
 
 ## Current Focus
 
-We have successfully completed Phase 002: CI/CD Pipeline. All the continuous integration and continuous delivery infrastructure is now in place. We've automated testing, code quality checks, security scanning, and documentation generation processes.
+We are now beginning Phase 003: Core Architecture. After successfully completing Phase 002 (CI/CD Pipeline), our focus shifts to building the core architectural foundation of the Testronaut application. This phase involves implementing the data models, component interfaces, error handling framework, and logging systems that will support all subsequent features.
 
-### Completed Phase 002 Tasks
+### Key Tasks for Phase 003
 
-1. Set up GitHub Actions workflows for:
-   - Automated testing on PR merge
-   - Linting and code quality checks
-   - Documentation generation and publishing
-   - Release management
-   - Security scanning and vulnerability detection
+1. Database Models and Migrations
+   - Design SQLModel-based data models for all entities (CLI tools, commands, test plans, test cases, results)
+   - Implement relationships between models as defined in the data model diagram
+   - Create database connection and session management
+   - Set up Alembic for database migrations
+   - Implement initial migration script
 
-2. Implemented modern Python project tooling:
-   - Using astral-sh/setup-uv@v5 action for dependency management
-   - Configured ruff for linting
-   - Set up mypy for type checking
-   - Implemented pre-commit hooks
+2. Component Interfaces
+   - Define interface protocols for all core components:
+     - CLI Analyzer
+     - Test Generator
+     - Test Executor
+     - Result Verifier
+     - Report Generator
+   - Implement base classes for common functionality
+   - Create factory classes for component instantiation
+   - Set up dependency injection framework
+   - Document interface contracts
 
-3. Established documentation infrastructure:
-   - Using MkDocs with Material theme
-   - Set up automatic API documentation
-   - Created user guides and references
-   - Added detailed CLI and configuration reference documentation
+3. Error Handling Framework
+   - Design custom exception hierarchy
+   - Implement global error handlers
+   - Create error logging and reporting utilities
+   - Set up error recovery mechanisms
+   - Implement user-friendly error messages
 
-4. Created local CI/CD testing tools:
-   - Docker-based workflow testing with Act
-   - Individual component testing scripts
-   - Security scanning validation tools
-   - Documentation build verification
+4. Logging and Monitoring
+   - Configure structured logging system
+   - Implement context-aware logging
+   - Create performance monitoring utilities
+   - Set up health check endpoints
+   - Implement telemetry collection
+
+### Implementation Approach
+
+We will follow a domain-driven design approach with clear separation of concerns:
+
+1. **Data Models**: Using SQLModel to create ORM models that reflect our domain entities
+2. **Component Interfaces**: Creating protocol-based interfaces to define component contracts
+3. **Error Handling**: Building a comprehensive exception hierarchy for different error types
+4. **Logging Framework**: Implementing structured logging with contextual information
+
+We'll use a test-driven development approach, creating tests for models, interfaces, and utilities before implementing the actual code. This will ensure that our architecture meets the requirements and is robust.
 
 ### Recent Decisions
 
-- We've decided to run CI workflows only on PR merge to main/master branch to reduce resource usage
-- We're using the latest GitHub Actions: actions/checkout@v4.2.2 and actions/setup-python@v5
-- We're using the official astral-sh/setup-uv@v5 action instead of a manual setup
-- We've standardized on Python 3.13 for build and documentation jobs
-- We're still running the test matrix on Python 3.10, 3.11, 3.12, and 3.13 for compatibility
+- We've successfully completed Phase 002 (CI/CD Pipeline) with all workflows implemented and tested
+- We're using GitHub Actions with the latest tooling (actions/checkout@v4.2.2, actions/setup-python@v5)
+- We're standardizing on Python 3.13 for build and documentation jobs
 - We've implemented comprehensive security scanning with Safety, Bandit, and CodeQL
-- Security scanning runs on a weekly schedule and on dependency changes
-- We've created comprehensive documentation with detailed API references and CLI usage guides
-- We've implemented local testing tools for CI workflows to validate changes before pushing
-- We've created utility scripts with virtual environments for security scanning and documentation building
+- We've updated our documentation to reflect the current project status
+
+### Architectural Decisions for Phase 003
+
+1. **Database Technology**: Using SQLite with SQLModel for simplicity and ease of deployment
+2. **Interface Design**: Using Python's Protocol classes for type-safe interface definitions
+3. **Error Handling**: Creating a custom exception hierarchy with specialized error types
+4. **Logging System**: Implementing structured logging with JSON output format
+5. **Component Communication**: Using a dependency injection approach for loose coupling
 
 ### Next Steps
 
-1. Begin Phase 003: Core Architecture
-   - Implement the domain-driven design architecture
-   - Build core business logic layers
-   - Create data models and repositories
-   - Implement dependency injection system
-2. Create detailed architectural documentation
+1. Start with implementing the data models and database setup
+2. Define interface protocols for core components
+3. Create base classes for common functionality
+4. Set up the error handling framework
+5. Implement the logging system
 
 ## Development Context
 
@@ -59,46 +80,47 @@ The project is using a domain-driven design approach with clear separation of co
 
 ### Current Status
 
+- Phase 000 (Project Setup) is complete
 - Phase 001 (Testing Infrastructure) is complete
 - Phase 002 (CI/CD Pipeline) is complete
+- Phase 003 (Core Architecture) is now starting
 - The codebase has good test coverage (72%) and passing tests
-- Ready to begin Phase 003 (Core Architecture)
 
 ## Recent Activities
-1. Completed project directory structure following domain-driven design
-2. Implemented modular CLI interface with Typer
-3. Set up dependency management with UV
-4. Created development environment with pre-commit hooks
-5. Implemented initial unit tests with 48% code coverage
-6. Added comprehensive documentation for developers
+1. Completed CI/CD workflows with GitHub Actions
+2. Implemented local testing tools for workflows
+3. Created security scanning and documentation scripts
+4. Updated project documentation and CHANGELOG
+5. Prepared for core architecture implementation
 
 ## Current Tasks
-1. Unit Testing Framework
-   - [x] Set up pytest configuration
-   - [x] Create basic test fixtures
-   - [x] Implement initial unit tests for CLI
-   - [x] Implement initial unit tests for analyzer
-   - [ ] Complete comprehensive unit tests for all modules
-   - [ ] Create mock objects for external dependencies
-   - [ ] Achieve at least 80% code coverage
+1. Database Models and Migrations
+   - [ ] Design SQLModel-based data models
+   - [ ] Implement relationships between models
+   - [ ] Create database connection management
+   - [ ] Set up Alembic migrations
+   - [ ] Write comprehensive model tests
 
-2. Integration Testing Framework
-   - [ ] Set up integration test structure
-   - [ ] Create database test fixtures
-   - [ ] Implement component interaction tests
-   - [ ] Create mock LLM service for testing
+2. Component Interfaces
+   - [ ] Define interface protocols
+   - [ ] Create base abstract classes
+   - [ ] Implement factory pattern
+   - [ ] Set up dependency injection
+   - [ ] Write interface tests
 
-3. Functional Testing Framework
-   - [ ] Design workflow-based testing approach
-   - [ ] Create end-to-end test scenarios
-   - [ ] Implement CLI interaction testing
-   - [ ] Set up Docker test environment
+3. Error Handling Framework
+   - [ ] Design exception hierarchy
+   - [ ] Implement global error handlers
+   - [ ] Create error reporting utilities
+   - [ ] Set up recovery mechanisms
+   - [ ] Test error handling
 
-4. Coverage and Reporting
-   - [x] Configure basic coverage reporting
-   - [ ] Enhance coverage measurement
-   - [ ] Set up report generation in different formats
-   - [ ] Create coverage enforcement rules
+4. Logging and Monitoring
+   - [ ] Configure structured logging
+   - [ ] Implement context-aware logging
+   - [ ] Create monitoring utilities
+   - [ ] Set up health checks
+   - [ ] Test logging functionality
 
 ## Decisions & Considerations
 
@@ -106,9 +128,9 @@ The project is using a domain-driven design approach with clear separation of co
 1. **Python Version**: Using Python 3.13 for latest features and performance
 2. **Package Management**: Using uv for speed and reliability
 3. **CLI Framework**: Using Typer for type-safe CLI development
-4. **Testing Framework**: Using pytest with pytest-cov for coverage
-5. **Code Quality**: Using ruff for linting and formatting
-6. **Static Type Checking**: Using mypy for type checking
+4. **ORM**: Using SQLModel for database interactions
+5. **Logging**: Using structlog for structured logging
+6. **Testing**: Using pytest with pytest-cov for coverage
 
 ### Architecture Decisions
 1. **Modular Design**: Components with well-defined interfaces
@@ -122,20 +144,20 @@ The project is using a domain-driven design approach with clear separation of co
 1. **Package Management**: Chosen uv over pip/poetry for speed and reliability
 2. **Code Formatting**: Chosen ruff over black for linting and formatting
 3. **Test Framework**: Chosen pytest over unittest for flexibility and plugins
+4. **CI/CD Provider**: Chosen GitHub Actions for tight integration with repository
 
 ### Pending Decisions
-1. **CI/CD Provider**: Evaluating GitHub Actions vs. alternatives
-2. **Documentation Generator**: Considering MkDocs vs. Sphinx
-3. **Default LLM Provider**: Evaluating OpenAI vs. Anthropic vs. local models
+1. **Default LLM Provider**: Evaluating OpenAI vs. Anthropic vs. local models
+2. **Container Management**: Evaluating different Docker Python libraries
 
 ## Blockers & Challenges
-1. **Docker Integration**: Ensuring cross-platform compatibility
-2. **LLM Cost Management**: Optimizing LLM usage to control costs
-3. **Testing Approach**: Designing tests for AI-based systems
-4. **Mocking LLM Responses**: Creating realistic test fixtures for LLM
+1. **SQLModel Integration**: Ensuring proper integration with Pydantic v2
+2. **Interface Design**: Creating flexible yet type-safe interfaces
+3. **Error Handling**: Designing a comprehensive error handling system
+4. **Testing Strategy**: Developing effective tests for abstract interfaces
 
 ## Active Discussions
-1. Best practices for testing LLM interactions
-2. Strategies for mocking Docker containers in tests
-3. Approaches for semantic comparison in test verification
-4. Performance optimization for LLM-based tests
+1. Best approach for dependency injection in Python
+2. Strategies for testing abstract interfaces
+3. Error handling patterns for CLI applications
+4. Performance considerations for database operations

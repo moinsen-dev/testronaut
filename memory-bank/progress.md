@@ -1,14 +1,14 @@
 # Project Progress
 
 ## Overall Status
-Testronaut is in its initial development phase. Version 0.1.0 has been released with the project structure, CLI interface, and development setup completed.
+Testronaut is in its initial development phase. Version 0.4.0 has been released with the project structure, CI/CD pipeline, and test infrastructure completed.
 
 | Phase | Status | Progress |
 |-------|--------|----------|
 | Phase 000: Project Setup | ✅ Completed | 100% |
 | Phase 001: Testing Infrastructure | ✅ Completed | 100% |
 | Phase 002: CI/CD Pipeline | ✅ Completed | 100% |
-| Phase 003: Core Architecture | ❌ Not Started | 0% |
+| Phase 003: Core Architecture | 🚧 In Progress | 0% |
 | Phase 004: CLI Analysis Engine | ❌ Not Started | 0% |
 | Phase 005: Test Plan Generator | ❌ Not Started | 0% |
 | Phase 006: Docker Test Execution | ❌ Not Started | 0% |
@@ -18,6 +18,28 @@ Testronaut is in its initial development phase. Version 0.1.0 has been released 
 | Phase 010: Integration & Release | ❌ Not Started | 0% |
 
 ## Current Phase Details
+
+### Phase 003: Core Architecture (0% Complete)
+
+| Feature | Status | Progress |
+|---------|--------|----------|
+| 3.1: Database Models and Migrations | 🚧 In Progress | 0% |
+| 3.2: Component Interfaces | ❌ Not Started | 0% |
+| 3.3: Error Handling Framework | ❌ Not Started | 0% |
+| 3.4: Logging and Monitoring | ❌ Not Started | 0% |
+
+#### Goals
+- Implement the domain-driven design architecture as the foundation for all features
+- Create data models and database schema for all entities
+- Define component interfaces with clear contracts
+- Establish comprehensive error handling and logging frameworks
+- Set up monitoring and health check utilities
+
+#### Current Focus
+- Designing SQLModel-based data models for CLI tools, commands, test plans, and results
+- Planning component interfaces with Protocol classes
+- Establishing database connection and session management
+- Creating initial Alembic migration scripts
 
 ### Phase 000: Project Setup (100% Complete)
 
@@ -94,19 +116,19 @@ Testronaut is in its initial development phase. Version 0.1.0 has been released 
 
 The implementation plan follows a sequential approach with some parallel development where possible:
 
-### Infrastructure Phases (Weeks 1-2)
+### Infrastructure Phases (Weeks 1-4)
 - **Phase 000: Project Setup** - ✅ Completed
-- **Phase 001: Testing Infrastructure** - 🚧 In Progress (95%)
-- **Phase 002: CI/CD Pipeline** - Automating workflows
-- **Phase 003: Core Architecture** - Implementing base components
+- **Phase 001: Testing Infrastructure** - ✅ Completed
+- **Phase 002: CI/CD Pipeline** - ✅ Completed
+- **Phase 003: Core Architecture** - 🚧 In Progress (0%)
 
-### Feature Phases (Weeks 3-7)
+### Feature Phases (Weeks 5-9)
 - **Phase 004: CLI Analysis Engine** - Understanding CLI tools (2 weeks)
 - **Phase 005: Test Plan Generator** - Creating test plans (2 weeks)
 - **Phase 006: Docker Test Execution** - Running tests in containers (1 week)
 - **Phase 007: AI Result Verification** - Verifying test results (2 weeks)
 
-### Integration Phases (Weeks 8-10)
+### Integration Phases (Weeks 10-12)
 - **Phase 008: Model Flexibility** - Supporting multiple LLMs (1 week)
 - **Phase 009: Reporting System** - Generating reports (1 week)
 - **Phase 010: Integration & Release** - Final MVP release (1 week)
@@ -118,6 +140,7 @@ The implementation plan follows a sequential approach with some parallel develop
 | 0.1.0 | 2024-03-24 | Initial setup, documentation, and planning |
 | 0.2.0 | 2024-03-30 | Completed project setup, CLI interface, initial test framework |
 | 0.3.0 | 2024-04-04 | Improved testing infrastructure, analyzer and generator modules |
+| 0.4.0 | 2024-03-24 | Comprehensive CI/CD pipeline, security scanning, test improvements |
 
 ## Success Metrics Progress
 
@@ -132,25 +155,24 @@ The implementation plan follows a sequential approach with some parallel develop
 
 ## Known Issues & Limitations
 
-The project has made significant progress with setup and testing infrastructure, but still has the following limitations:
+The project has made significant progress with setup, testing infrastructure, and CI/CD, but still has the following limitations:
 
-1. CLI interface is not yet connected to actual functionality
-2. Integration with Docker or LLMs not implemented
-3. Test coverage needs improvement in CLI command modules
-4. No CI/CD pipeline configured
+1. Core architecture not yet implemented
+2. CLI interface not yet connected to actual functionality
+3. Integration with Docker or LLMs not implemented
+4. Test coverage needs improvement in CLI command modules
 5. Analyzer has limited support for complex command structures
-6. Collection warnings for test classes need to be addressed
 
 ## Next Milestones
 
-1. **Complete Phase 001** (Testing Infrastructure)
-   - Estimated completion: 1 week
-   - Key deliverables: Comprehensive testing framework, 80%+ coverage, functional tests
+1. **Complete Phase 003** (Core Architecture)
+   - Estimated completion: 2 weeks
+   - Key deliverables: Database models, component interfaces, error handling, logging
 
-2. **Phase 002** (CI/CD Pipeline)
-   - Estimated start: After Phase 001 completion
-   - Estimated duration: 1 week
-   - Key deliverables: GitHub Actions workflow, automated testing, release pipeline
+2. **Phase 004** (CLI Analysis Engine)
+   - Estimated start: After Phase 003 completion
+   - Estimated duration: 2 weeks
+   - Key deliverables: CLI tool analysis, command extraction, help text parsing
 
 ## Technical Debt
 
@@ -160,28 +182,30 @@ Current technical debt items to address:
 2. ✅ Comprehensive test strategy implemented
 3. ✅ CLI command tests fixed with simpler approach
 4. ✅ Analyzer improved for better subcommand detection
-5. 🚧 Collection warnings for test classes with constructors
+5. ✅ Collection warnings for test classes with constructors addressed
 6. ❌ Error handling implementation needed
 
 ## Prioritization
 
-Current priority is to complete Phase 001 by addressing the remaining test coverage issues, particularly in the CLI commands module, and then proceed to Phase 002.
+Current priority is to implement the core architecture, focusing first on the data models and database infrastructure, followed by component interfaces, error handling, and logging.
 
 ## Decisions
 
 - ✅ Rename TestCase, TestPlan and TestGenerator classes to avoid pytest collection warnings
 - ✅ Use a mock CLI implementation for functional tests to avoid dependency issues
+- ✅ Use SQLModel for ORM with SQLite backend
+- ✅ Implement Protocol-based interfaces for component contracts
 
 ## Overall Progress
 
-- **Total phases completed**: 0.95/2 (47.5%)
+- **Total phases completed**: 3/10 (30%)
 - **Current coverage**: 72%
-- **Current phase**: Phase 001 (Testing Infrastructure)
+- **Current phase**: Phase 003 (Core Architecture)
 
 ## Phase Progress
 
-- **Current phase**: Phase 002 (CI/CD Pipeline)
-- **Status**: Completed (100%)
+- **Current phase**: Phase 004 (CLI Analysis Engine)
+- **Status**: Planned (0%)
 - **Last update**: March 24, 2024
 
 ### Phase 001: Testing Infrastructure
@@ -218,9 +242,16 @@ Current priority is to complete Phase 001 by addressing the remaining test cover
   - Created utility scripts with virtual environments for security scanning and documentation building
 
 ### Phase 003: Core Architecture
-- **Status**: Planned (0%)
+- **Status**: In progress (0%)
 - **Goals**:
   - Implement the domain-driven design architecture
   - Build core business logic layers
   - Create data models and repositories
   - Implement dependency injection system
+  - Establish error handling framework
+  - Configure logging and monitoring
+- **Current focus**:
+  - Designing data models based on the data model diagram
+  - Planning component interfaces with Protocol classes
+  - Establishing database connection strategy
+  - Preparing for initial migration scripts
