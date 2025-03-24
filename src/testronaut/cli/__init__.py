@@ -173,9 +173,20 @@ def analyze_tool(
     deep: bool = typer.Option(
         False, "--deep", "-d", help="Perform deep analysis (longer but more thorough)"
     ),
+    enhanced: bool = typer.Option(
+        False, "--enhanced", "-e", help="Use LLM-enhanced analyzer (more detailed analysis)"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show detailed progress logs during analysis"
+    ),
 ):
     """Analyze a CLI tool and generate a test plan."""
     console.print(f"Analyzing tool: [bold]{tool_path}[/bold]")
+
+    # Configure verbose logging if requested
+    if verbose:
+        configure_logging(level="DEBUG")
+        logger.debug("Verbose logging enabled")
 
     try:
         # Create output directory if it doesn't exist
@@ -187,8 +198,11 @@ def analyze_tool(
         if analyzer_factory is None:
             raise ValueError("CLI Analyzer factory not registered")
 
-        # Create an analyzer (use LLM-enhanced if deep analysis requested)
-        analyzer_type = "llm_enhanced" if deep else "standard"
+        # Create an analyzer
+        analyzer_type = "standard"
+        if enhanced or deep:  # If either enhanced or deep is specified, use LLM-enhanced
+            analyzer_type = "llm_enhanced"
+
         analyzer = analyzer_factory.create(analyzer_type)
 
         console.print(f"Using [bold]{analyzer_type}[/bold] analyzer for analysis")
@@ -196,73 +210,113 @@ def analyze_tool(
         # Extract tool name from path
         tool_name = os.path.basename(tool_path)
 
-        # Start the analysis
-        with console.status(f"Analyzing {tool_name}...", spinner="dots"):
+        # Create a detailed progress display
+        from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}[/bold blue]"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            # Start a task
+            task = progress.add_task(f"Analyzing {tool_name}...", total=None)
+
+            # Run the analysis
             cli_tool = analyzer.analyze_cli_tool(tool_path)
 
+            # Update task for export phase
+            progress.update(task, description="Exporting analysis results...")
+
+            # Save analysis results to JSON file
+            output_file = output_path / f"{tool_name}_analysis.json"
+
+            # Convert model to dictionary
+            tool_dict = cli_tool.dict(exclude={"id"})
+
+            # Add commands as a top-level list
+            commands_list = []
+            for cmd in cli_tool.commands:
+                cmd_dict = cmd.dict(exclude={"cli_tool", "cli_tool_id"})
+
+                # Process options
+                options_list = []
+                for opt in cmd.options:
+                    opt_dict = opt.dict(exclude={"command", "command_id"})
+                    options_list.append(opt_dict)
+                cmd_dict["options"] = options_list
+
+                # Process arguments
+                args_list = []
+                for arg in cmd.arguments:
+                    arg_dict = arg.dict(exclude={"command", "command_id"})
+                    args_list.append(arg_dict)
+                cmd_dict["arguments"] = args_list
+
+                # Process examples
+                examples_list = []
+                for ex in cmd.examples:
+                    ex_dict = ex.dict(exclude={"command", "command_id"})
+                    examples_list.append(ex_dict)
+                cmd_dict["examples"] = examples_list
+
+                commands_list.append(cmd_dict)
+
+            tool_dict["commands"] = commands_list
+
+            # Write to file
+            with open(output_file, "w") as f:
+                # Create a custom JSON encoder to handle datetime objects
+                class DateTimeEncoder(json.JSONEncoder):
+                    def default(self, obj):
+                        if isinstance(obj, datetime):
+                            return obj.isoformat()
+                        return super().default(obj)
+
+                json.dump(tool_dict, f, indent=2, cls=DateTimeEncoder)
+
+            # Complete the task
+            progress.update(task, description="Analysis complete!", completed=True)
+
+        # Export semantic analysis for LLM-enhanced analyzer
+        if enhanced or deep:
+            # Create semantic analysis directory
+            semantic_path = output_path / "semantic"
+            semantic_path.mkdir(exist_ok=True)
+
+            # Save semantic analysis for each command
+            if hasattr(cli_tool, "metadata") and getattr(cli_tool, "metadata", {}).get(
+                "semantic_analysis"
+            ):
+                console.print("\nExporting semantic analysis...")
+
+                # Extract semantic analysis
+                semantic_analysis = cli_tool.metadata["semantic_analysis"]
+
+                # Save for each command
+                for cmd in cli_tool.commands:
+                    if cmd.id in semantic_analysis:
+                        semantic_file = semantic_path / f"{cmd.name}.json"
+                        with open(semantic_file, "w") as f:
+                            json.dump(semantic_analysis[cmd.id], f, indent=2)
+
         # Report findings
-        console.print(f"\nAnalysis of [bold]{tool_name}[/bold] completed")
-        console.print(f"Found [bold]{len(cli_tool.commands)}[/bold] commands")
+        console.print(
+            Panel.fit(
+                f"[bold green]Analysis of {tool_name} completed![/bold green]\n"
+                f"Found {len(cli_tool.commands)} top-level commands.\n"
+                f"Results saved to: {output_file}"
+            )
+        )
 
-        # Save analysis results to JSON file
-        output_file = output_path / f"{tool_name}_analysis.json"
-
-        # Convert model to dictionary
-        tool_dict = cli_tool.dict(exclude={"id"})
-
-        # Add commands as a top-level list
-        commands_list = []
-        for cmd in cli_tool.commands:
-            cmd_dict = cmd.dict(exclude={"cli_tool", "cli_tool_id"})
-
-            # Process options
-            options_list = []
-            for opt in cmd.options:
-                opt_dict = opt.dict(exclude={"command", "command_id"})
-                options_list.append(opt_dict)
-            cmd_dict["options"] = options_list
-
-            # Process arguments
-            args_list = []
-            for arg in cmd.arguments:
-                arg_dict = arg.dict(exclude={"command", "command_id"})
-                args_list.append(arg_dict)
-            cmd_dict["arguments"] = args_list
-
-            # Process examples
-            examples_list = []
-            for ex in cmd.examples:
-                ex_dict = ex.dict(exclude={"command", "command_id"})
-                examples_list.append(ex_dict)
-            cmd_dict["examples"] = examples_list
-
-            commands_list.append(cmd_dict)
-
-        tool_dict["commands"] = commands_list
-
-        # Write to file
-        with open(output_file, "w") as f:
-            # Create a custom JSON encoder to handle datetime objects
-            class DateTimeEncoder(json.JSONEncoder):
-                def default(self, obj):
-                    if isinstance(obj, datetime):
-                        return obj.isoformat()
-                    return super().default(obj)
-
-            json.dump(tool_dict, f, indent=2, cls=DateTimeEncoder)
-
-        console.print(f"Analysis results saved to: [bold]{output_file}[/bold]")
         return 0
-
-    except CommandExecutionError as e:
-        console.print(f"[bold red]Error executing command:[/bold red] {str(e)}")
-        return 1
-    except ValidationError as e:
-        console.print(f"[bold red]Validation error:[/bold red] {str(e)}")
-        return 1
     except Exception as e:
-        console.print(f"[bold red]Unexpected error:[/bold red] {str(e)}")
-        logger.exception(f"Unexpected error during analysis: {str(e)}")
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if verbose:
+            import traceback
+
+            console.print(f"[red]{traceback.format_exc()}[/red]")
+        logger.exception(f"Failed to analyze tool: {str(e)}")
         return 1
 
 

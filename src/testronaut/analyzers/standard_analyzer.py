@@ -5,7 +5,7 @@ This module provides a standard implementation of the CLI analyzer interface.
 """
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from testronaut.interfaces import CLIAnalyzer
 from testronaut.models import Argument, CLITool, Command, Example, Option
@@ -103,23 +103,40 @@ class StandardCLIAnalyzer(CLIAnalyzer):
 
         logger.debug(f"Getting help text for command: {full_cmd}")
 
-        # Try different help options
-        for help_option in self.help_options:
-            try:
-                result = self.command_runner.run(f"{full_cmd} {help_option}")
-                if result.succeeded:
-                    return result.output
-            except CommandExecutionError:
-                continue
+        # First, try the most reliable option: --help
+        try:
+            result = self.command_runner.run(f"{full_cmd} --help")
+            if result.succeeded:
+                return result.output
+        except CommandExecutionError:
+            logger.debug(f"Failed to get help with --help for {full_cmd}")
 
-        # Try help command format (e.g., git help commit)
+        # Then, try shorter help option
+        try:
+            result = self.command_runner.run(f"{full_cmd} -h")
+            if result.succeeded:
+                return result.output
+        except CommandExecutionError:
+            logger.debug(f"Failed to get help with -h for {full_cmd}")
+
+        # Try help subcommand format (e.g., git help commit)
         try:
             result = self.command_runner.run(f"{tool_name} help {command_name}")
             if result.succeeded:
                 return result.output
         except CommandExecutionError:
-            pass
+            logger.debug(f"Failed to get help with help subcommand for {full_cmd}")
 
+        # Try running the command with no arguments if it's a subcommand
+        if parent_path:
+            try:
+                result = self.command_runner.run(full_cmd)
+                if result.succeeded:
+                    return result.output
+            except CommandExecutionError:
+                logger.debug(f"Failed to run command without args: {full_cmd}")
+
+        # If all attempts failed, raise an error
         raise CommandExecutionError(
             f"Failed to get help text for command {full_cmd}",
             details={"attempted_options": self.help_options},
@@ -362,27 +379,39 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         tool_name = command.cli_tool.name
         command_name = command.name
 
-        # Build parent path for subcommands
-        parent_path = ""
-        if command.is_subcommand and command.parent_command_id:
+        # Build command path for subcommands by traversing the parent chain
+        command_path_parts: List[str] = []
+        current_command = command
+
+        # First, check if the command has a parent
+        while hasattr(current_command, "parent_command_id") and current_command.parent_command_id:
             # Find the parent command by ID
             parent_command = None
             for cmd in command.cli_tool.commands:
-                if hasattr(cmd, "id") and cmd.id == command.parent_command_id:
+                if hasattr(cmd, "id") and cmd.id == current_command.parent_command_id:
                     parent_command = cmd
                     break
 
+            # If found, add to path and continue up the chain
             if parent_command and hasattr(parent_command, "name"):
-                parent_path = parent_command.name
+                command_path_parts.insert(0, parent_command.name)
+                current_command = parent_command
+            else:
+                break
 
         # Build the full command path
-        if parent_path:
-            full_cmd = f"{tool_name} {parent_path} {command_name}"
+        command_path = " ".join(command_path_parts)
+
+        # Build the full command string
+        if command_path:
+            full_cmd = f"{tool_name} {command_path} {command_name}"
         else:
             full_cmd = f"{tool_name} {command_name}"
 
         try:
-            help_text = self.get_command_help_text(tool_name, command_name, parent_path)
+            help_text = self.get_command_help_text(
+                tool_name, command_name, parent_path=command_path
+            )
         except CommandExecutionError:
             logger.warning(f"Could not get help text for {full_cmd}")
             return []
@@ -419,12 +448,15 @@ class StandardCLIAnalyzer(CLIAnalyzer):
 
         return examples
 
-    def update_command_info(self, command: Command) -> Command:
+    def update_command_info(
+        self, command: Command, processed_commands: Optional[Set[str]] = None
+    ) -> Command:
         """
         Update and enrich the information for a specific command.
 
         Args:
             command: The command object to update.
+            processed_commands: Set of already processed command IDs to prevent cycles.
 
         Returns:
             The updated command object with enriched information.
@@ -433,23 +465,53 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             CommandExecutionError: If the command cannot be executed.
             ValidationError: If the command information cannot be validated.
         """
+        # Initialize processed_commands set if not provided
+        if processed_commands is None:
+            processed_commands = set()
+
+        # Check if command has already been processed to prevent cycles
+        command_id = getattr(command, "id", None)
+        if command_id and command_id in processed_commands:
+            logger.warning(
+                f"Cycle detected: Command {command.name} has already been processed. Skipping."
+            )
+            return command
+
+        # Add current command ID to processed set
+        if command_id:
+            processed_commands.add(command_id)
+
         logger.debug(f"Updating information for command: {command.name}")
 
         try:
-            # Build parent path for subcommands
-            parent_path = ""
-            if command.is_subcommand and command.parent_command_id:
+            # Build command path for subcommands by traversing the parent chain
+            command_path_parts: List[str] = []
+            current_command = command
+
+            # First, check if the command has a parent
+            while (
+                hasattr(current_command, "parent_command_id") and current_command.parent_command_id
+            ):
                 # Find the parent command by ID
                 parent_command = None
                 for cmd in command.cli_tool.commands:
-                    if hasattr(cmd, "id") and cmd.id == command.parent_command_id:
+                    if hasattr(cmd, "id") and cmd.id == current_command.parent_command_id:
                         parent_command = cmd
                         break
 
+                # If found, add to path and continue up the chain
                 if parent_command and hasattr(parent_command, "name"):
-                    parent_path = parent_command.name
+                    command_path_parts.insert(0, parent_command.name)
+                    current_command = parent_command
+                else:
+                    break
 
-            help_text = self.get_command_help_text(command.cli_tool.name, command.name, parent_path)
+            # Build the full command path
+            command_path = " ".join(command_path_parts)
+
+            help_text = self.get_command_help_text(
+                command.cli_tool.name, command.name, command_path
+            )
             command.help_text = help_text
 
             # Extract syntax if available
@@ -501,46 +563,59 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             # Extract subcommands by analyzing help text for this command
             # Build the command path for subcommand extraction
             cmd_path = command.name
-            if parent_path:
-                cmd_path = f"{parent_path} {cmd_path}"
+            if command_path:
+                cmd_path = f"{command_path} {cmd_path}"
 
             subcommands_data = self.extract_commands(
                 f"{command.cli_tool.name} {cmd_path}", help_text
             )
 
             # Process subcommands
-            for subcmd_data in subcommands_data:
-                subcmd_name = subcmd_data.get("name", "")
-                # Create a new command with the parent command as a prefix
-                subcmd = Command(
-                    cli_tool_id=command.cli_tool.id,
-                    name=subcmd_name,
-                    description=subcmd_data.get("description"),
-                    parent_command_id=command.id,
-                    is_subcommand=True,
-                )
+            if subcommands_data:
+                for subcmd_data in subcommands_data:
+                    # Check if this subcommand already exists
+                    subcmd_name = subcmd_data.get("name", "")
 
-                # Set the cli_tool reference explicitly
-                subcmd.cli_tool = command.cli_tool
+                    # Skip if the subcommand name is the same as the parent to avoid cycles
+                    if subcmd_name.lower() == command.name.lower():
+                        logger.warning(
+                            f"Skipping subcommand {subcmd_name} to avoid cycle with parent command {command.name}"
+                        )
+                        continue
 
-                # Add to the parent command's subcommands
-                command.subcommands.append(subcmd)
+                    existing_subcmd = None
+                    for cmd in command.cli_tool.commands:
+                        if (
+                            hasattr(cmd, "name")
+                            and hasattr(cmd, "parent_command_id")
+                            and getattr(cmd, "name", "").lower() == subcmd_name.lower()
+                            and getattr(cmd, "parent_command_id", None) == command.id
+                        ):
+                            existing_subcmd = cmd
+                            break
 
-                # Recursively analyze this subcommand to get its details
-                try:
-                    self.update_command_info(subcmd)
-                except CommandExecutionError:
-                    logger.warning(f"Could not analyze subcommand: {subcmd_name}")
+                    if not existing_subcmd:
+                        # Create new subcommand
+                        subcommand = Command(
+                            cli_tool_id=command.cli_tool.id,
+                            name=subcmd_name,
+                            description=subcmd_data.get("description"),
+                            parent_command_id=command.id,
+                            is_subcommand=True,
+                        )
+                        command.cli_tool.commands.append(subcommand)
 
             return command
         except CommandExecutionError as e:
-            # Log error but continue analysis
             logger.error(f"Failed to update command {command.name}: {str(e)}")
-            return command
+            raise CommandExecutionError(
+                f"Failed to update command {command.name}", details={"error": str(e)}
+            )
 
     def analyze_cli_tool(self, tool_name: str, version: Optional[str] = None) -> CLITool:
         """
         Analyze a CLI tool and extract its commands, options, and arguments.
+        Uses a two-phase approach to prevent cycles and provide accurate progress reporting.
 
         Args:
             tool_name: The name of the CLI tool to analyze.
@@ -556,6 +631,7 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         logger.info(f"Analyzing CLI tool: {tool_name}")
 
         # Check if tool is installed
+        logger.info(f"Step 1/7: Verifying installation of {tool_name}...")
         if not self.verify_tool_installation(tool_name):
             raise CommandExecutionError(
                 f"CLI tool {tool_name} is not installed or not found in PATH",
@@ -563,11 +639,14 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             )
 
         # Get tool help text
+        logger.info(f"Step 2/7: Retrieving main help text for {tool_name}...")
         help_text = self.get_tool_help_text(tool_name)
 
         # Get tool version if not provided
         if not version:
+            logger.info(f"Step 3/7: Detecting version of {tool_name}...")
             version = self.get_tool_version(tool_name)
+            logger.info(f"Detected version: {version or 'unknown'}")
 
         # Create CLI tool model
         cli_tool = CLITool(name=tool_name, version=version, help_text=help_text)
@@ -579,10 +658,12 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         if desc_match:
             cli_tool.description = desc_match.group(1).strip()
 
-        # Extract commands
+        # Phase 1: Extract and discover all commands (discovery phase)
+        logger.info(f"Step 4/7: Extracting top-level commands for {tool_name}...")
         commands_data = self.extract_commands(tool_name, help_text)
+        logger.info(f"Found {len(commands_data)} top-level commands")
 
-        # Create command models
+        # Create command models for top-level commands
         for cmd_data in commands_data:
             command = Command(
                 cli_tool_id=cli_tool.id,
@@ -591,23 +672,130 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             )
             cli_tool.commands.append(command)
 
-        # Update each command with more detailed information and recursively analyze subcommands
-        for command in cli_tool.commands:
-            self.update_command_info(command)
+        # Phase 1.5: Build command tree structure and count total commands
+        logger.info("Step 5/7: Building command tree structure...")
+        # A set to track discovered command IDs and prevent cycles
+        discovered_cmds: Set[str] = set()
+
+        # Discovery queue
+        discovery_queue = list(cli_tool.commands)
+        discovery_index = 0
+
+        # Discover subcommands without full analysis
+        while discovery_index < len(discovery_queue):
+            command = discovery_queue[discovery_index]
+            discovery_index += 1
+
+            # Skip if already discovered
+            command_id = getattr(command, "id", None)
+            if command_id and command_id in discovered_cmds:
+                continue
+
+            if command_id:
+                discovered_cmds.add(command_id)
+
+            logger.debug(f"Discovering command structure: {command.name}")
+
+            # Build command path for this command
+            cmd_path_parts: List[str] = []
+            curr = command
+            while hasattr(curr, "parent_command_id") and curr.parent_command_id:
+                # Find parent
+                parent = None
+                for cmd in cli_tool.commands:
+                    if hasattr(cmd, "id") and cmd.id == curr.parent_command_id:
+                        parent = cmd
+                        break
+
+                if parent and hasattr(parent, "name"):
+                    cmd_path_parts.insert(0, parent.name)
+                    curr = parent
+                else:
+                    break
+
+            cmd_path = " ".join(cmd_path_parts)
+
+            # Get help text for this command
+            try:
+                cmd_help = self.get_command_help_text(cli_tool.name, command.name, cmd_path)
+
+                # Extract subcommands
+                subcmd_path = command.name
+                if cmd_path:
+                    subcmd_path = f"{cmd_path} {subcmd_path}"
+
+                subcmds_data = self.extract_commands(f"{cli_tool.name} {subcmd_path}", cmd_help)
+
+                # Add subcommands to tree and queue
+                for subcmd_data in subcmds_data:
+                    subcmd_name = subcmd_data.get("name", "")
+
+                    # Skip if the subcommand name is the same as the parent to avoid cycles
+                    command_name = getattr(command, "name", "")
+                    if subcmd_name.lower() == command_name.lower():
+                        logger.warning(
+                            f"Skipping subcommand {subcmd_name} to avoid cycle with parent command {command_name}"
+                        )
+                        continue
+
+                    # Check if this subcommand already exists
+                    existing = None
+                    for cmd in cli_tool.commands:
+                        if (
+                            hasattr(cmd, "name")
+                            and hasattr(cmd, "parent_command_id")
+                            and getattr(cmd, "name", "").lower() == subcmd_name.lower()
+                            and getattr(cmd, "parent_command_id", None) == command_id
+                        ):
+                            existing = cmd
+                            break
+
+                    if not existing:
+                        # Create new subcommand
+                        subcommand = Command(
+                            cli_tool_id=cli_tool.id,
+                            name=subcmd_name,
+                            description=subcmd_data.get("description"),
+                            parent_command_id=command_id,
+                            is_subcommand=True,
+                        )
+                        cli_tool.commands.append(subcommand)
+                        discovery_queue.append(subcommand)
+            except Exception as e:
+                logger.warning(
+                    f"Error discovering subcommands for {getattr(command, 'name', 'unknown')}: {str(e)}"
+                )
+
+        # Count total commands for accurate progress reporting
+        total_commands = len(cli_tool.commands)
+        logger.info(f"Discovered {total_commands} total commands in command tree")
+
+        # Phase 2: Analyze each command with detailed information
+        logger.info("Step 6/7: Analyzing detailed command information...")
+        processed_commands: Set[str] = set()  # Track processed commands to prevent cycles
+
+        for i, command in enumerate(cli_tool.commands):
+            logger.info(
+                f"Analyzing command {i + 1}/{total_commands}: {getattr(command, 'name', 'unknown')}"
+            )
+            self.update_command_info(command, processed_commands)
 
         # Clean up duplicate commands with different capitalization
+        logger.info("Step 7/7: Cleaning up and finalizing analysis...")
         self._clean_up_duplicate_commands(cli_tool)
 
-        logger.info(
-            f"Completed analysis of {tool_name}, found {len(cli_tool.commands)} top-level commands"
-        )
-
         # Count total commands including subcommands
-        total_commands = len(cli_tool.commands)
+        top_level_count = 0
+        subcommand_count = 0
         for cmd in cli_tool.commands:
-            total_commands += self._count_subcommands(cmd)
+            if not hasattr(cmd, "is_subcommand") or not getattr(cmd, "is_subcommand", False):
+                top_level_count += 1
+            else:
+                subcommand_count += 1
 
-        logger.info(f"Total commands including subcommands: {total_commands}")
+        logger.info(
+            f"Analysis complete! Found {top_level_count} top-level commands and {subcommand_count} subcommands"
+        )
         return cli_tool
 
     def _clean_up_duplicate_commands(self, cli_tool: CLITool) -> None:

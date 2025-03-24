@@ -5,13 +5,14 @@ Testronaut - AI-assisted end-to-end CLI testing tool.
 This module serves as the main entry point for the CLI application.
 """
 
-import typer
 from pathlib import Path
 from typing import Optional
-from rich.console import Console
-from rich import print as rprint
 
-from testronaut.cli.commands import analyze, generate, verify, report
+import typer
+from rich import print as rprint
+from rich.console import Console
+
+from testronaut.cli.commands import analyze, generate, report, verify
 
 # Create Typer app
 app = typer.Typer(
@@ -22,6 +23,7 @@ app = typer.Typer(
 
 # Global options
 console = Console()
+
 
 @app.callback()
 def callback(

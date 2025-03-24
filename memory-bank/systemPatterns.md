@@ -505,3 +505,132 @@ graph TD
 5. **Typer for CLI Interface**: Typer offers a modern, type-annotated approach to building CLI applications.
 
 6. **FastAPI for Future Web Interface**: FastAPI will provide a high-performance, easy-to-develop web interface when needed.
+
+## Current Architectural State
+
+The Testronaut architecture has evolved substantially through Phase 3 (Core Architecture) and Phase 4 (CLI Analysis Engine):
+
+### Implemented Components:
+
+1. **Core Framework**
+   - CLI application using Typer
+   - Factory pattern for component creation
+   - Repository pattern for data access
+   - Dependency injection for component integration
+   - Configuration management
+   - Comprehensive logging
+
+2. **LLM Service**
+   - Provider-based architecture
+   - Support for OpenAI, Anthropic, and mock providers
+   - Task-specific model selection
+   - Structured JSON output generation
+   - Error handling and retries
+
+3. **CLI Analyzer**
+   - Standard analyzer implementation
+   - Command extraction and parsing
+   - Subcommand detection and hierarchy
+   - Command relationships and ID tracking
+   - Help text processing for various formats
+   - Analysis output serialization
+
+### Current Development Focus:
+
+We are now implementing the Test Plan Generator in Phase 5, which builds on the CLI Analysis Engine to:
+- Generate test plans from CLI analysis results
+- Create diverse test cases using LLM capabilities
+- Predict expected outputs for commands
+- Support various test coverage levels
+- Provide user-friendly CLI access
+
+### Architectural Decisions:
+
+1. **Component Structure**
+   - Each major component has a clear interface
+   - Multiple implementations can be swapped via factories
+   - Configuration determines which implementation is used
+   - Tests can use mock implementations
+
+2. **Data Flow**
+   - CLI tool → Analyzer → Test Generator → Test Executor → Result Verifier → Reports
+   - Each component produces artifacts used by the next
+   - Results are persisted for later analysis
+
+3. **Extension Points**
+   - New analyzer implementations can be added
+   - Additional LLM providers can be integrated
+   - Custom test generators can be implemented
+   - New verification strategies can be developed
+
+### Design Patterns in Use:
+
+1. **Factory Pattern**
+   - Component factories allow runtime selection of implementations
+   - Factories are registered at startup
+   - Configuration determines which implementation to create
+
+2. **Strategy Pattern**
+   - Different strategies for analysis, generation, execution, and verification
+   - Strategies share a common interface
+   - Concrete implementations handle specific approaches
+
+3. **Repository Pattern**
+   - Data access through repository interfaces
+   - SQLite implementation for persistence
+   - In-memory implementation for testing
+
+4. **Adapter Pattern**
+   - LLM provider adapters for different services
+   - Docker adapter for container management
+   - CLI tool adapters for different command structures
+
+5. **Observer Pattern**
+   - Event-based logging and monitoring
+   - Progress reporting for long-running operations
+   - Status updates during test execution
+
+## CLI Analysis Patterns
+
+### Two-Phase Analysis Pattern
+
+The CLI analyzer uses a two-phase analysis pattern to handle complex command hierarchies:
+
+1. **Phase 1: Discovery Phase**
+   - Builds a complete structural map of commands without detailed analysis
+   - Establishes parent-child relationships between commands
+   - Maintains a tracked set of processed commands to prevent cycles
+   - Focuses on breadth rather than depth
+
+2. **Phase 2: Enrichment Phase**
+   - Processes each command individually with detailed analysis
+   - Extracts options, arguments, examples, and metadata
+   - Operates sequentially rather than recursively
+   - Enriches the command structure built during Phase 1
+
+This pattern provides several benefits:
+- Prevents infinite loops when processing complex command hierarchies
+- Improves performance by separating structure discovery from detailed analysis
+- Enhances maintainability with clear separation of concerns
+- Enables better progress reporting and error handling
+
+### Cycle Detection Pattern
+
+To prevent infinite loops in recursive command structures:
+
+- Each command is assigned a unique identifier
+- A set of already processed command IDs is maintained
+- Before processing a command, it's checked against the processed set
+- If already processed, the command is skipped with appropriate logging
+- This pattern is essential for handling CLI tools with unusual command naming patterns
+
+### LLM Fallback Pattern
+
+For challenging command structures or non-standard help text formats:
+
+- Standard parsing is attempted first
+- If standard parsing fails, LLM-based extraction is used as a fallback
+- LLM extraction is guided by structured prompts and response schemas
+- Results are validated and merged with standard analysis results
+
+This pattern provides resilience against unusual CLI formats while maintaining efficiency for standard cases.

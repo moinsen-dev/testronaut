@@ -1,78 +1,60 @@
 # Active Context
 
 ## Current Focus
+We are currently focused on Phase 5: Test Plan Generator. Having completed the core architecture (Phase 3) and CLI analysis engine (Phase 4), we're now working on:
 
-We are now beginning Phase 003: Core Architecture. After successfully completing Phase 002 (CI/CD Pipeline), our focus shifts to building the core architectural foundation of the Testronaut application. This phase involves implementing the data models, component interfaces, error handling framework, and logging systems that will support all subsequent features.
+1. **Test Plan Generation**: Building the component that creates test plans from CLI analysis results
+2. **LLM Integration for Test Cases**: Using LLM services to generate comprehensive test cases
+3. **Expected Output Prediction**: Implementing functionality to predict expected outputs for commands
 
-### Key Tasks for Phase 003
+This phase leverages our completed CLI analyzer and LLM integration to automatically generate test cases based on the structure of CLI tools.
 
-1. Database Models and Migrations
-   - Design SQLModel-based data models for all entities (CLI tools, commands, test plans, test cases, results)
-   - Implement relationships between models as defined in the data model diagram
-   - Create database connection and session management
-   - Set up Alembic for database migrations
-   - Implement initial migration script
+## Most Recent Phase Completion
 
-2. Component Interfaces
-   - Define interface protocols for all core components:
-     - CLI Analyzer
-     - Test Generator
-     - Test Executor
-     - Result Verifier
-     - Report Generator
-   - Implement base classes for common functionality
-   - Create factory classes for component instantiation
-   - Set up dependency injection framework
-   - Document interface contracts
+### Phase 4: CLI Analysis Engine - Completed
+We've successfully implemented the CLI Analysis Engine, which can:
+- Extract commands, subcommands, options, and arguments from CLI tools
+- Build command hierarchies and maintain proper relationships
+- Handle various help text formats and patterns
+- Generate structured output for use in test generation
+- Process complex command hierarchies using two-phase analysis and cycle detection
+- Provide detailed progress reporting through verbose logging
+- Fall back to LLM-based analysis for challenging CLI formats
 
-3. Error Handling Framework
-   - Design custom exception hierarchy
-   - Implement global error handlers
-   - Create error logging and reporting utilities
-   - Set up error recovery mechanisms
-   - Implement user-friendly error messages
+The analyzer provides a solid foundation for the test plan generator we're now building.
 
-4. Logging and Monitoring
-   - Configure structured logging system
-   - Implement context-aware logging
-   - Create performance monitoring utilities
-   - Set up health check endpoints
-   - Implement telemetry collection
+## Current Technical Challenges
 
-### Implementation Approach
+1. **Test Plan Structure**: Designing a flexible yet structured model for test plans
+2. **Test Case Generation**: Using LLMs to generate meaningful test cases for different command types
+3. **Expected Output Prediction**: Accurately predicting command outputs in various scenarios
+4. **Coverage Optimization**: Ensuring generated test plans achieve good coverage of CLI functionality
 
-We will follow a domain-driven design approach with clear separation of concerns:
+## Current Component Development
 
-1. **Data Models**: Using SQLModel to create ORM models that reflect our domain entities
-2. **Component Interfaces**: Creating protocol-based interfaces to define component contracts
-3. **Error Handling**: Building a comprehensive exception hierarchy for different error types
-4. **Logging Framework**: Implementing structured logging with contextual information
+We are developing the following components:
 
-We'll use a test-driven development approach, creating tests for models, interfaces, and utilities before implementing the actual code. This will ensure that our architecture meets the requirements and is robust.
+1. **TestPlan Model**: Data structure to represent comprehensive test plans
+2. **TestCase Model**: Representation of individual test cases with expected outcomes
+3. **TestGenerator Interface**: Abstract definition of test generation capabilities
+4. **StandardTestGenerator**: Concrete implementation using LLM services
+5. **CLI Integration**: Command-line interface for test plan generation
 
-### Recent Decisions
+## Implementation Progress
 
-- We've successfully completed Phase 002 (CI/CD Pipeline) with all workflows implemented and tested
-- We're using GitHub Actions with the latest tooling (actions/checkout@v4.2.2, actions/setup-python@v5)
-- We're standardizing on Python 3.13 for build and documentation jobs
-- We've implemented comprehensive security scanning with Safety, Bandit, and CodeQL
-- We've updated our documentation to reflect the current project status
+- Core architecture is fully implemented
+- CLI analyzer is complete and working well with robust handling of complex command structures
+- LLM service integration is in place with multiple provider support
+- Beginning work on test plan generation models and interfaces
+- Starting implementation of LLM-based test case generation
 
-### Architectural Decisions for Phase 003
+## Next Immediate Steps
 
-1. **Database Technology**: Using SQLite with SQLModel for simplicity and ease of deployment
-2. **Interface Design**: Using Python's Protocol classes for type-safe interface definitions
-3. **Error Handling**: Creating a custom exception hierarchy with specialized error types
-4. **Logging System**: Implementing structured logging with JSON output format
-5. **Component Communication**: Using a dependency injection approach for loose coupling
-
-### Next Steps
-
-1. Start with implementing the data models and database setup
-2. Define interface protocols for core components
-3. Create base classes for common functionality
-4. Set up the error handling framework
-5. Implement the logging system
+1. Define the TestPlan and TestCase data models
+2. Implement the TestGenerator interface
+3. Create the StandardTestGenerator class
+4. Design effective LLM prompts for test generation
+5. Integrate with the CLI framework for end-user access
 
 ## Development Context
 
@@ -83,44 +65,38 @@ The project is using a domain-driven design approach with clear separation of co
 - Phase 000 (Project Setup) is complete
 - Phase 001 (Testing Infrastructure) is complete
 - Phase 002 (CI/CD Pipeline) is complete
-- Phase 003 (Core Architecture) is now starting
+- Phase 003 (Core Architecture) is complete
+- Phase 004 (CLI Analysis Engine) is complete
+- Phase 005 (Test Plan Generator) is now in progress
 - The codebase has good test coverage (72%) and passing tests
 
 ## Recent Activities
-1. Completed CI/CD workflows with GitHub Actions
-2. Implemented local testing tools for workflows
-3. Created security scanning and documentation scripts
-4. Updated project documentation and CHANGELOG
-5. Prepared for core architecture implementation
+1. Fixed infinite loop issue in CLI analyzer with two-phase analysis and cycle detection
+2. Enhanced CLI analyzer progress reporting with detailed logging
+3. Added fallback to LLM for challenging command structures
+4. Updated documentation to reflect CLI analyzer improvements
+5. Prepared for test plan generation implementation
 
 ## Current Tasks
-1. Database Models and Migrations
-   - [ ] Design SQLModel-based data models
-   - [ ] Implement relationships between models
-   - [ ] Create database connection management
-   - [ ] Set up Alembic migrations
-   - [ ] Write comprehensive model tests
+1. TestPlan Model
+   - [ ] Define the data structure for comprehensive test plans
+   - [ ] Implement the TestPlan model
 
-2. Component Interfaces
-   - [ ] Define interface protocols
-   - [ ] Create base abstract classes
-   - [ ] Implement factory pattern
-   - [ ] Set up dependency injection
-   - [ ] Write interface tests
+2. TestCase Model
+   - [ ] Define the data structure for individual test cases
+   - [ ] Implement the TestCase model
 
-3. Error Handling Framework
-   - [ ] Design exception hierarchy
-   - [ ] Implement global error handlers
-   - [ ] Create error reporting utilities
-   - [ ] Set up recovery mechanisms
-   - [ ] Test error handling
+3. TestGenerator Interface
+   - [ ] Define the abstract interface for test generation capabilities
+   - [ ] Implement the TestGenerator interface
 
-4. Logging and Monitoring
-   - [ ] Configure structured logging
-   - [ ] Implement context-aware logging
-   - [ ] Create monitoring utilities
-   - [ ] Set up health checks
-   - [ ] Test logging functionality
+4. StandardTestGenerator
+   - [ ] Create the concrete implementation for test generation
+   - [ ] Implement the StandardTestGenerator class
+
+5. CLI Integration
+   - [ ] Design the command-line interface for test plan generation
+   - [ ] Implement the CLI integration
 
 ## Decisions & Considerations
 
@@ -145,6 +121,7 @@ The project is using a domain-driven design approach with clear separation of co
 2. **Code Formatting**: Chosen ruff over black for linting and formatting
 3. **Test Framework**: Chosen pytest over unittest for flexibility and plugins
 4. **CI/CD Provider**: Chosen GitHub Actions for tight integration with repository
+5. **CLI Analysis Approach**: Implemented two-phase analysis with cycle detection for robust processing
 
 ### Pending Decisions
 1. **Default LLM Provider**: Evaluating OpenAI vs. Anthropic vs. local models

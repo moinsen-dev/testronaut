@@ -11,6 +11,9 @@
 ## Features
 
 - Analyzes CLI applications to understand their command structure
+  - Two-phase analysis for complex command hierarchies
+  - Robust cycle detection to prevent infinite loops
+  - Detailed progress reporting during analysis
 - Generates comprehensive test plans automatically
 - Creates runnable test files based on test plans
 - Verifies test execution against expected results

@@ -23,7 +23,9 @@ Testronaut is an AI-powered, containerized framework for end-to-end testing of C
 - **Phase 000: Project Setup** ✅ Completed (100%)
 - **Phase 001: Testing Infrastructure** ✅ Completed (100%)
 - **Phase 002: CI/CD Pipeline** ✅ Completed (100%)
-- **Phase 003: Core Architecture** 🚧 Planned (Next Phase)
+- **Phase 003: Core Architecture** ✅ Completed (100%)
+- **Phase 004: CLI Analysis Engine** ✅ Completed (100%)
+- **Phase 005: Test Plan Generator** 🚧 In Progress (10%)
 - **Current Version:** 0.4.0
 - **Test Coverage:** 72%
 - **Last Update:** March 24, 2024
@@ -155,6 +157,10 @@ testronauting is ideal for:
 The system consists of five main components:
 
 1. **CLI Analyzer**: Parses and understands command structure
+   - Two-phase command discovery and analysis
+   - Robust cycle detection for complex command hierarchies
+   - Verbose logging and progress reporting
+   - LLM-enhanced fallback for challenging CLI formats
 2. **Test Generator**: Creates comprehensive test plans
 3. **Test Executor**: Runs tests in Docker containers
 4. **Result Verifier**: Compares expected vs. actual results

@@ -1,7 +1,7 @@
 """
-CLI Analyzers package.
+Analyzer package.
 
-This package provides implementations for analyzing CLI tools and commands.
+This package provides components for analyzing CLI tools.
 """
 
 # Import implementations after defining them to avoid circular imports
