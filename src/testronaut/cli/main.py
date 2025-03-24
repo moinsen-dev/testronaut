@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-AI-CLI-Testing - AI-assisted end-to-end CLI testing tool.
+Testronaut - AI-assisted end-to-end CLI testing tool.
 
 This module serves as the main entry point for the CLI application.
 """
@@ -11,11 +11,11 @@ from typing import Optional
 from rich.console import Console
 from rich import print as rprint
 
-from testronaut.cli import analyze, generate, verify, report
+from testronaut.cli.commands import analyze, generate, verify, report
 
 # Create Typer app
 app = typer.Typer(
-    name="ai-cli-test",
+    name="testronaut",
     help="AI-assisted end-to-end CLI testing tool",
     add_completion=True,
 )
@@ -45,7 +45,7 @@ def callback(
         help="LLM to use (openai, anthropic, or local model path)",
     ),
     output_dir: Path = typer.Option(
-        Path("./ai-cli-test-output"),
+        Path("./testronaut-output"),
         "--output-dir",
         "-o",
         help="Directory to store results",
@@ -64,7 +64,7 @@ def callback(
     ),
 ):
     """
-    AI-CLI-Testing - AI-assisted end-to-end CLI testing tool.
+    Testronaut - AI-assisted end-to-end CLI testing tool.
 
     This tool uses AI to analyze CLI applications, generate test plans,
     execute tests in isolated Docker containers, and verify results.
@@ -94,7 +94,7 @@ app.add_typer(report.app, name="report", help="Generate test report from results
 def print_banner():
     """Print application banner."""
     banner = """
-    [bold blue]AI-CLI-Testing[/bold blue] - [italic]AI-assisted end-to-end CLI testing tool[/italic]
+    [bold blue]Testronaut[/bold blue] - [italic]AI-assisted end-to-end CLI testing tool[/italic]
     Version 0.1.0
     Created by Ulrich Diedrichsen (uli@moinsen.dev)
     """
