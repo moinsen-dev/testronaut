@@ -11,7 +11,7 @@ from typing import Optional
 from rich.console import Console
 from rich import print as rprint
 
-from ai_cli_testing.cli import analyze, generate, verify, report
+from testronaut.cli import analyze, generate, verify, report
 
 # Create Typer app
 app = typer.Typer(
@@ -65,7 +65,7 @@ def callback(
 ):
     """
     AI-CLI-Testing - AI-assisted end-to-end CLI testing tool.
-    
+
     This tool uses AI to analyze CLI applications, generate test plans,
     execute tests in isolated Docker containers, and verify results.
     """
@@ -78,7 +78,7 @@ def callback(
         "docker_image": docker_image,
         "verbose": verbose,
     }
-    
+
     # Create output directory if it doesn't exist
     if not output_dir.exists():
         output_dir.mkdir(parents=True)

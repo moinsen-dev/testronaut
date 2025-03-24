@@ -20,7 +20,7 @@ Create a fully configured development environment with appropriate project struc
 The project follows a modular architecture with clear separation of concerns:
 
 ```
-ai_cli_testing/
+testronaut/
 ├── cli/            # Command-line interface modules
 ├── core/           # Core business logic
 │   ├── analyzer/   # CLI tool analysis components

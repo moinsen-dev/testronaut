@@ -1,13 +1,19 @@
-# Testronaut - testronauting
-
-Testronaut is an AI-powered, containerized framework for end-to-end testing of CLI tools. It analyzes commands, generates test plans, verifies outputs semantically with LLMs, and runs everything safely in Docker.
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/your-username/testronaut)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/your-username/testronaut/issues)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/your-username/testronaut/graphs/commit-activity)
 [![Ask Me Anything !](https://img.shields.io/badge/Ask%20me-anything-1abc9c.svg)](https://github.com/your-username/testronaut/discussions)
+
+# Testronaut - testronauting
+
+<div align="center">
+  <img src="images/testronaut-logo.png" alt="Testronaut Logo" width="300"/>
+  <p><em>AI-powered testing for CLI tools</em></p>
+</div>
+
+Testronaut is an AI-powered, containerized framework for end-to-end testing of CLI tools. It analyzes commands, generates test plans, verifies outputs semantically with LLMs, and runs everything safely in Docker.
+
 
 # testronauting
 
@@ -23,6 +29,11 @@ testronauting replaces traditional, brittle test scripts with an AI-powered syst
 4. **Verifies results using semantic comparison** rather than exact string matching
 
 This approach dramatically reduces the effort required to create and maintain CLI tests while providing more robust coverage.
+
+<div align="center">
+  <img src="images/testronaut-workflow.png" alt="Testronaut Workflow" width="700"/>
+  <p><em>Testronaut's end-to-end testing workflow</em></p>
+</div>
 
 ## Key Features
 
@@ -70,6 +81,11 @@ testronauting is ideal for:
 - **Open Source Maintainers**: Scale testing of CLI projects with minimal effort
 
 ## Technical Architecture
+
+<div align="center">
+  <img src="images/testronaut-architecture.png" alt="Testronaut Architecture" width="700"/>
+  <p><em>Testronaut's component architecture</em></p>
+</div>
 
 The system consists of five main components:
 

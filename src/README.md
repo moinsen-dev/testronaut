@@ -5,14 +5,14 @@ This folder contains the suggested code structure for the AI-CLI-Testing project
 ## Folder Structure
 
 ```
-ai_cli_testing/
+testronaut/
 ├── pyproject.toml                 # Project metadata and dependencies
 ├── README.md                      # Project documentation
 ├── .gitignore                     # Git ignore file
 ├── docker/                        # Docker-related files
 │   ├── Dockerfile                 # Base Dockerfile for the application
 │   └── templates/                 # Docker templates for test containers
-├── ai_cli_testing/                # Main package
+├── testronaut/                # Main package
 │   ├── __init__.py                # Package initialization
 │   ├── cli/                       # Command-line interface
 │   │   ├── __init__.py
@@ -67,29 +67,29 @@ ai_cli_testing/
 
 ## Key Components
 
-### CLI Interface (`ai_cli_testing/cli/`)
+### CLI Interface (`testronaut/cli/`)
 Contains the command-line interface implementation. The main entry point is `main.py`, with separate modules for each subcommand (analyze, generate, verify, report).
 
-### Core Functionality (`ai_cli_testing/core/`)
+### Core Functionality (`testronaut/core/`)
 Implements the core features of the application:
 - `analyzer.py`: Parses and analyzes CLI tools
 - `test_generator.py`: Generates test plans
 - `test_executor.py`: Executes tests in Docker containers
 - `result_verifier.py`: Verifies test results
 
-### Docker Integration (`ai_cli_testing/docker/`)
+### Docker Integration (`testronaut/docker/`)
 Handles interaction with Docker for container management:
 - `container.py`: Creates and manages Docker containers
 - `network.py`: Manages Docker networks for test isolation
 
-### LLM Integration (`ai_cli_testing/llm/`)
+### LLM Integration (`testronaut/llm/`)
 Manages interaction with language models:
 - `manager.py`: Coordinates LLM requests
 - `prompts.py`: Defines prompt templates
 - `cloud.py`: Integrates with cloud LLMs
 - `local.py`: Integrates with local LLMs
 
-### Data Models (`ai_cli_testing/models/`)
+### Data Models (`testronaut/models/`)
 Defines the data structures used throughout the application:
 - `cli_tool.py`: CLI tool metadata
 - `command.py`: Command metadata
@@ -97,13 +97,13 @@ Defines the data structures used throughout the application:
 - `test_case.py`: Test case model
 - `test_result.py`: Test result model
 
-### Database Management (`ai_cli_testing/db/`)
+### Database Management (`testronaut/db/`)
 Handles database operations:
 - `connection.py`: Manages database connection
 - `migrations/`: Contains database schema migrations
 - `repositories/`: Implements data access objects
 
-### Utilities (`ai_cli_testing/utils/`)
+### Utilities (`testronaut/utils/`)
 Common utility functions:
 - `logging.py`: Logging utilities
 - `file.py`: File operations

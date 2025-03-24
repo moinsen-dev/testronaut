@@ -11,9 +11,9 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 import logging
 
-from ai_cli_testing.llm.manager import LLMManager
-from ai_cli_testing.models.cli_tool import CLITool
-from ai_cli_testing.models.command import Command, Option, Argument
+from testronaut.llm.manager import LLMManager
+from testronaut.models.cli_tool import CLITool
+from testronaut.models.command import Command, Option, Argument
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class CLIAnalyzer:
 
     def __init__(self, llm_manager: LLMManager):
         """Initialize CLI analyzer.
-        
+
         Args:
             llm_manager: LLM manager for AI-assisted analysis
         """
@@ -31,26 +31,26 @@ class CLIAnalyzer:
 
     def analyze_tool(self, tool_name: str, install_cmd: Optional[str] = None) -> CLITool:
         """Analyze a CLI tool and extract its command structure.
-        
+
         Args:
             tool_name: Name or path of the CLI tool
             install_cmd: Command to install the tool if not already installed
-            
+
         Returns:
             CLITool object containing the tool's metadata and commands
         """
         logger.info(f"Analyzing CLI tool: {tool_name}")
-        
+
         # Install tool if needed and if install command is provided
         if install_cmd:
             self._install_tool(install_cmd)
-        
+
         # Extract help text
         help_text = self._extract_help_text(tool_name)
-        
+
         # Use LLM to analyze help text
         tool_metadata = self._analyze_with_llm(tool_name, help_text)
-        
+
         # Create CLI tool object
         cli_tool = CLITool(
             name=tool_name,
@@ -59,12 +59,12 @@ class CLIAnalyzer:
             description=tool_metadata.get("description", ""),
             commands=self._extract_commands(tool_name, tool_metadata),
         )
-        
+
         return cli_tool
 
     def _install_tool(self, install_cmd: str) -> None:
         """Install a CLI tool using the provided command.
-        
+
         Args:
             install_cmd: Command to install the tool
         """
@@ -85,10 +85,10 @@ class CLIAnalyzer:
 
     def _extract_help_text(self, tool_name: str) -> str:
         """Extract help text from the CLI tool.
-        
+
         Args:
             tool_name: Name or path of the CLI tool
-            
+
         Returns:
             Help text from the tool
         """
@@ -103,7 +103,7 @@ class CLIAnalyzer:
                 stderr=subprocess.PIPE,
                 text=True,
             )
-            
+
             # If --help didn't work, try -h
             if process.returncode != 0:
                 process = subprocess.run(
@@ -114,12 +114,12 @@ class CLIAnalyzer:
                     stderr=subprocess.PIPE,
                     text=True,
                 )
-            
+
             # Combine stdout and stderr as some tools output help to stderr
             help_text = process.stdout
             if process.stderr and not help_text:
                 help_text = process.stderr
-                
+
             return help_text
         except Exception as e:
             logger.error(f"Failed to extract help text: {str(e)}")
@@ -127,23 +127,23 @@ class CLIAnalyzer:
 
     def _analyze_with_llm(self, tool_name: str, help_text: str) -> Dict[str, Any]:
         """Use LLM to analyze help text and extract tool metadata.
-        
+
         Args:
             tool_name: Name of the CLI tool
             help_text: Help text from the tool
-            
+
         Returns:
             Dictionary containing tool metadata
         """
         logger.info(f"Analyzing help text with LLM for: {tool_name}")
-        
+
         prompt = f"""
         Analyze the following help text for the CLI tool '{tool_name}' and extract its structure:
-        
+
         ```
         {help_text}
         ```
-        
+
         Extract the following information:
         1. Tool version (if available)
         2. Tool description
@@ -153,12 +153,12 @@ class CLIAnalyzer:
            - Command description
            - Options (flags) with their descriptions
            - Arguments with their descriptions
-        
+
         Format your response as a structured JSON object.
         """
-        
+
         response = self.llm_manager.generate(prompt)
-        
+
         try:
             # The LLM should return a JSON string, which we parse
             # In a real implementation, this would include proper JSON handling
@@ -170,19 +170,19 @@ class CLIAnalyzer:
 
     def _extract_commands(self, tool_name: str, tool_metadata: Dict[str, Any]) -> List[Command]:
         """Extract commands from tool metadata.
-        
+
         Args:
             tool_name: Name of the CLI tool
             tool_metadata: Metadata extracted by LLM
-            
+
         Returns:
             List of Command objects
         """
         commands = []
-        
+
         # Extract commands from metadata
         raw_commands = tool_metadata.get("commands", [])
-        
+
         for cmd_data in raw_commands:
             # Extract options
             options = []
@@ -197,7 +197,7 @@ class CLIAnalyzer:
                     value_type=opt_data.get("value_type", "string"),
                 )
                 options.append(option)
-            
+
             # Extract arguments
             arguments = []
             for arg_data in cmd_data.get("arguments", []):
@@ -210,7 +210,7 @@ class CLIAnalyzer:
                     position=arg_data.get("position", 0),
                 )
                 arguments.append(argument)
-            
+
             # Create command
             command = Command(
                 name=cmd_data.get("name", ""),
@@ -222,7 +222,7 @@ class CLIAnalyzer:
                 options=options,
                 arguments=arguments,
             )
-            
+
             commands.append(command)
-        
+
         return commands

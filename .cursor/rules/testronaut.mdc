@@ -1,0 +1,62 @@
+---
+description: Rules for working with the Testronaut project
+globs: 
+alwaysApply: true
+---
+
+## Testronaut Project Rules
+
+### Project Structure
+- Use uv as python package manager
+- All Python code follows domain-driven design principles
+- Core business logic is separated from infrastructure concerns
+- Each component has a well-defined responsibility and interface
+- Use dependency injection for flexible component integration
+- Follow the repository pattern for data access
+
+### Coding Standards
+- Use type hints consistently throughout the codebase
+- Document all public functions, classes, and methods
+- Follow PEP 8 style guidelines (enforced by Black and isort)
+- Use dataclasses or Pydantic models for data structures
+- Write unit tests for all business logic
+
+### Naming Conventions
+- Use snake_case for variables, functions, and modules
+- Use PascalCase for classes
+- Use UPPER_CASE for constants
+- Use descriptive names that reflect purpose
+
+### CLI Design
+- Each command has a distinct purpose
+- Help text is comprehensive and includes examples
+- Commands follow a consistent pattern
+- Error messages are helpful and actionable
+- Progress feedback is provided for long-running operations
+
+### Documentation Standards
+- READMEs provide clear overviews and setup instructions
+- Code comments explain "why" not "what"
+- Diagrams use Mermaid syntax
+- Examples are provided for all features
+- Update documentation when implementing features
+
+### Testing Approach
+- Write tests before implementation (TDD)
+- Unit test all business logic
+- Integration test component interactions
+- Functional test complete workflows
+- Maintain high test coverage (target: 80%+)
+
+### Version Control
+- Use semantic versioning
+- Write clear commit messages
+- Update CHANGELOG.md with each version
+- Create descriptive pull requests
+- Link PRs to issues
+
+### Phase Management
+- Complete one phase before moving to the next
+- Update progress tracking in memory-bank/progress.md
+- Mark tasks as complete only when fully implemented and tested
+- Document phase decisions and learnings

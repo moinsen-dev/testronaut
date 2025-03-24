@@ -31,7 +31,7 @@ COPY pyproject.toml README.md ./
 RUN uv pip install -e .
 
 # Copy application code
-COPY ai_cli_testing/ ./ai_cli_testing/
+COPY testronaut/ ./testronaut/
 
 # Set entrypoint
 ENTRYPOINT ["ai-cli-test"]

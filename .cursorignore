@@ -1,0 +1,67 @@
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+
+# Builds and distributions
+build/
+dist/
+*.egg-info/
+
+# Caches
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+.tox/
+
+# Generated files
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dll
+*.class
+
+# Test results and artifacts
+test_artifacts/
+test_results/
+expected_results/
+actual_results/
+.coverage
+htmlcov/
+coverage.xml
+
+# Documentation builds
+docs/_build/
+site/
+
+# SQLite databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Docker
+.docker/
+
+# Large data and model files
+*.pt
+*.weights
+*.bin
+*.pkl
+*.h5
+*.onnx
+*.tflite
+
+# Logs
+logs/
+*.log
+
+# Dependencies
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+.vs/
