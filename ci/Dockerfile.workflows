@@ -1,0 +1,75 @@
+FROM ubuntu:22.04
+
+# Set noninteractive installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
+
+# Install basic dependencies
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    curl \
+    git \
+    build-essential \
+    ca-certificates \
+    gnupg \
+    sudo \
+    lsb-release \
+    jq \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add deadsnakes PPA for multiple Python versions
+RUN add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update
+
+# Install Python versions
+RUN apt-get install -y \
+    python3.10 \
+    python3.10-venv \
+    python3.10-dev \
+    python3.11 \
+    python3.11-venv \
+    python3.11-dev \
+    python3.12 \
+    python3.12-venv \
+    python3.12-dev \
+    python3-pip \
+    python3-yaml \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.12 as default python3
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Add uv to PATH for all users
+ENV PATH="/root/.local/bin:${PATH}"
+
+# Install GitHub Actions CLI tools
+RUN apt-get update && \
+    apt-get install -y \
+    wget \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install GitHub CLI
+RUN wget -O- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y gh \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python security tools
+RUN uv pip install --system safety bandit
+
+# Set up the actions validator
+COPY ci/actions-validator.py /usr/local/bin/actions-validator
+RUN chmod +x /usr/local/bin/actions-validator
+
+# Create a workspace directory
+WORKDIR /github/workspace
+
+CMD ["bash"]

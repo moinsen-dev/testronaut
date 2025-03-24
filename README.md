@@ -1,6 +1,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/your-username/testronaut)
-[![Code Coverage](https://img.shields.io/badge/coverage-48%25-orange.svg)](https://github.com/your-username/testronaut)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/your-username/testronaut)
+[![Code Coverage](https://img.shields.io/badge/coverage-72%25-yellow.svg)](https://github.com/your-username/testronaut)
+[![CI Status](https://img.shields.io/github/actions/workflow/status/your-username/testronaut/main.yml?label=CI)](https://github.com/your-username/testronaut/actions/workflows/main.yml)
+[![Documentation Status](https://img.shields.io/github/actions/workflow/status/your-username/testronaut/docs.yml?label=docs)](https://github.com/your-username/testronaut/actions/workflows/docs.yml)
+[![Security Status](https://img.shields.io/github/actions/workflow/status/your-username/testronaut/security.yml?label=security)](https://github.com/your-username/testronaut/actions/workflows/security.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/your-username/testronaut/issues)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/your-username/testronaut/graphs/commit-activity)
@@ -15,6 +18,15 @@
 
 Testronaut is an AI-powered, containerized framework for end-to-end testing of CLI tools. It analyzes commands, generates test plans, verifies outputs semantically with LLMs, and runs everything safely in Docker.
 
+## Current Status
+
+- **Phase 000: Project Setup** ✅ Completed (100%)
+- **Phase 001: Testing Infrastructure** ✅ Completed (100%)
+- **Phase 002: CI/CD Pipeline** ✅ Completed (100%)
+- **Phase 003: Core Architecture** 🚧 Planned (Next Phase)
+- **Current Version:** 0.4.0
+- **Test Coverage:** 72%
+- **Last Update:** March 24, 2024
 
 # testronauting
 
@@ -43,6 +55,7 @@ This approach dramatically reduces the effort required to create and maintain CL
 - **Containerized Execution**: Run tests in isolated Docker environments
 - **Semantic Result Verification**: Compare outputs based on meaning, not exact matches
 - **Model Flexibility**: Support for both cloud and local LLMs for cost efficiency
+- **Comprehensive CI/CD**: Automated testing, documentation, and security scanning
 
 ## Getting Started
 
@@ -146,6 +159,37 @@ The system consists of five main components:
 3. **Test Executor**: Runs tests in Docker containers
 4. **Result Verifier**: Compares expected vs. actual results
 5. **LLM Integration**: Powers the AI capabilities
+
+## CI/CD Infrastructure
+
+Testronaut uses GitHub Actions for comprehensive CI/CD pipelines:
+
+### Workflows
+- **Main Workflow**: Runs tests and code quality checks on all pull requests and pushes to main branch
+- **Documentation Workflow**: Builds and publishes documentation to GitHub Pages
+- **Release Workflow**: Creates releases and publishes packages to PyPI
+- **Security Workflow**: Performs security scanning with Safety, Bandit, and CodeQL
+
+### Local Testing Tools
+We provide several scripts to test workflows locally before pushing:
+
+```bash
+# Test GitHub Actions workflows with local validation
+./ci/test-workflows.sh --validate
+
+# Run security scanning locally
+./ci/test-security.sh
+
+# Build documentation locally
+./ci/test-docs.sh
+```
+
+### Key Features
+- Matrix testing across Python 3.10, 3.11, 3.12, and 3.13
+- Fast dependency management with astral-sh/setup-uv@v5
+- Comprehensive security scanning
+- Automated documentation generation and publishing
+- Efficient caching for faster workflow runs
 
 ## Roadmap
 
