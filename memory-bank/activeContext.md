@@ -1,12 +1,51 @@
 # Active Context
 
 ## Current Focus
-The project has completed the initial setup phase (Phase 000) and is now in the Testing Infrastructure phase (Phase 001). This phase involves establishing a comprehensive testing framework for the project, including:
 
-1. Completing the unit testing framework
-2. Implementing integration testing
-3. Setting up functional testing
-4. Enhancing test coverage and reporting
+We are currently working on Phase 002: CI/CD Pipeline. This phase involves setting up the continuous integration and continuous delivery infrastructure for the project. The goal is to automate testing, code quality checks, and deployment processes.
+
+### Key Tasks in Progress
+
+1. Setting up GitHub Actions workflows for:
+   - Automated testing on PR merge
+   - Linting and code quality checks
+   - Documentation generation and publishing
+   - Release management
+
+2. Implementing modern Python project tooling:
+   - Using astral-sh/setup-uv@v5 action for dependency management
+   - Configuring ruff for linting
+   - Setting up mypy for type checking
+   - Implementing pre-commit hooks
+
+3. Establishing documentation infrastructure:
+   - Using MkDocs with Material theme
+   - Setting up automatic API documentation
+   - Creating user guides and references
+
+### Recent Decisions
+
+- We've decided to run CI workflows only on PR merge to main/master branch to reduce resource usage
+- We're using the latest GitHub Actions: actions/checkout@v4.2.2 and actions/setup-python@v5
+- We're using the official astral-sh/setup-uv@v5 action instead of a manual setup
+- We've standardized on Python 3.13 for build and documentation jobs
+- We're still running the test matrix on Python 3.10, 3.11, 3.12, and 3.13 for compatibility
+
+### Next Steps
+
+1. Configure Codecov integration for test coverage reporting
+2. Add dependency scanning for security vulnerabilities
+3. Complete the basic documentation structure
+
+## Development Context
+
+The project is using a domain-driven design approach with clear separation of concerns. We're focusing on maintainable, testable code with high coverage and clear documentation.
+
+### Current Status
+
+- Phase 001 (Testing Infrastructure) is complete
+- Phase 002 (CI/CD Pipeline) is about 70% complete
+- The codebase has good test coverage (72%) and passing tests
 
 ## Recent Activities
 1. Completed project directory structure following domain-driven design
@@ -77,14 +116,6 @@ The project has completed the initial setup phase (Phase 000) and is now in the 
 2. **LLM Cost Management**: Optimizing LLM usage to control costs
 3. **Testing Approach**: Designing tests for AI-based systems
 4. **Mocking LLM Responses**: Creating realistic test fixtures for LLM
-
-## Next Steps
-After completing Phase 001, the project will move to Phase 002: CI/CD Pipeline. The immediate next steps after current tasks are:
-
-1. Set up GitHub Actions workflow for continuous integration
-2. Configure automated testing on push and pull requests
-3. Set up release automation
-4. Implement code quality checks in CI pipeline
 
 ## Active Discussions
 1. Best practices for testing LLM interactions

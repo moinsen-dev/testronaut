@@ -1,0 +1,74 @@
+name: Testronaut Release
+
+on:
+  push:
+    tags:
+      - "v*" # Run when tag is pushed matching v*, e.g., v1.0.0
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # For PyPI trusted publishing
+      contents: write # For creating GitHub releases
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0 # Fetch all history for changelog generation
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          version: "0.6.6" # Latest stable version
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system build twine
+
+      - name: Extract version from tag
+        id: tag
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package
+        run: twine check dist/*
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Testronaut ${{ steps.tag.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          body: |
+            Testronaut ${{ steps.tag.outputs.VERSION }} Release
+
+            See [CHANGELOG.md](https://github.com/yourusername/testronaut/blob/main/CHANGELOG.md) for details.
+
+      - name: Upload Release Assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/testronaut-${{ steps.tag.outputs.VERSION }}.tar.gz
+          asset_name: testronaut-${{ steps.tag.outputs.VERSION }}.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }} # Add this secret in your repo settings
