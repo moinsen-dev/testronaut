@@ -1,0 +1,111 @@
+name: Testronaut Security
+
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Run every Monday at 8:00 UTC
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+      - master
+    paths:
+      - "pyproject.toml"
+      - "requirements*.txt"
+      - "src/uv.lock"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  analyze:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    name: Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          version: "0.6.6" # Latest stable version
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system safety bandit
+
+      - name: Run Safety Security Analysis
+        run: |
+          uv pip freeze --system > requirements-frozen.txt
+          safety check -r requirements-frozen.txt --full-report
+
+      - name: Run Bandit Security Analysis
+        run: |
+          bandit -r src/ -f json -o bandit-results.json || true
+
+      - name: Upload security results
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-results
+          path: |
+            bandit-results.json
+            requirements-frozen.txt
+          retention-days: 7
+
+  dependency-review:
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: critical
+          comment-summary-in-pr: true
+
+  codeql-analysis:
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: python
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          version: "0.6.6"
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system -e '.[dev]'
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2

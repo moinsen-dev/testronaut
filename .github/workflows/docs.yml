@@ -1,0 +1,78 @@
+name: Testronaut Docs
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+      - master
+    paths:
+      - "docs/**"
+      - "src/**"
+      - "README.md"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  docs:
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          version: "0.6.6" # Latest stable version
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system -e '.[dev,docs]'
+          uv pip install mkdocs-material mkdocs-autorefs mkdocstrings[python]
+
+      - name: Build documentation
+        run: mkdocs build
+
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site/
+          retention-days: 7
+
+  deploy-docs:
+    needs: docs
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          version: "0.6.6" # Latest stable version
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system mkdocs-material
+
+      - name: Deploy to GitHub Pages
+        run: mkdocs gh-deploy --force
