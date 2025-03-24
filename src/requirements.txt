@@ -122,7 +122,7 @@ openai==1.68.2
     # via
     #   testronauting (pyproject.toml)
     #   langchain-openai
-orjson==3.10.15
+orjson==3.10.16
     # via langsmith
 packaging==24.2
     # via
