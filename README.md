@@ -1,5 +1,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/your-username/testronaut)
+[![Code Coverage](https://img.shields.io/badge/coverage-48%25-orange.svg)](https://github.com/your-username/testronaut)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](https://github.com/your-username/testronaut/issues)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/your-username/testronaut/graphs/commit-activity)
@@ -45,14 +46,65 @@ This approach dramatically reduces the effort required to create and maintain CL
 
 ## Getting Started
 
-### Installation
+### Development Setup
+
+We use [uv](https://github.com/astral-sh/uv) for fast, reliable Python packaging. Make sure it's installed first:
 
 ```bash
-# Install from PyPI
+# Install uv
+curl -L --proto '=https' --tlsv1.2 -sSf https://astral.sh/uv/install.sh | sh
+```
+
+Then set up the project:
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/testronaut.git
+cd testronaut
+
+# Run the setup script (creates venv and installs dependencies with uv)
+./setup.sh
+
+# Activate the virtual environment
+source .venv/bin/activate
+```
+
+Alternatively, set up manually with uv:
+
+```bash
+# Create virtual environment
+uv venv
+
+# Install the package in development mode
+uv pip install -e ./src
+
+# Install development dependencies
+uv pip install pytest pytest-cov mypy ruff pre-commit
+```
+
+### Installation for Users
+
+```bash
+# Install from PyPI using uv (recommended)
+uv pip install testronauting
+
+# Or install with pip
 pip install testronauting
 
-# Or install with local model support
-pip install testronauting[local]
+# For local model support
+uv pip install "testronauting[local]"
+```
+
+### Running Tests
+
+Use uv to run tests for better performance:
+
+```bash
+# Run tests
+uv run pytest
+
+# Run tests with coverage
+uv run pytest --cov=src/testronaut
 ```
 
 ### Basic Usage
@@ -109,7 +161,13 @@ If you're having issues or have questions, please:
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on how to contribute to Testronaut.
+
+Key points:
+- We use [uv](https://github.com/astral-sh/uv) for package management
+- Follow test-driven development principles
+- Use pre-commit hooks for code quality
+- Maintain code coverage above our current baseline
 
 ## License
 
