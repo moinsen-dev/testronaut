@@ -6,7 +6,7 @@ Testronaut is in its initial development phase. Version 0.1.0 has been released 
 | Phase | Status | Progress |
 |-------|--------|----------|
 | Phase 000: Project Setup | ✅ Completed | 100% |
-| Phase 001: Testing Infrastructure | 🚧 In Progress | 80% |
+| Phase 001: Testing Infrastructure | 🚧 In Progress | 95% |
 | Phase 002: CI/CD Pipeline | ❌ Not Started | 0% |
 | Phase 003: Core Architecture | ❌ Not Started | 0% |
 | Phase 004: CLI Analysis Engine | ❌ Not Started | 0% |
@@ -45,7 +45,7 @@ Testronaut is in its initial development phase. Version 0.1.0 has been released 
 - Achieved 48% code coverage
 - Configured VSCode settings for development
 
-### Phase 001: Testing Infrastructure (80% Complete)
+### Phase 001: Testing Infrastructure (95% complete)
 
 | Feature | Status | Progress |
 |---------|--------|----------|
@@ -69,6 +69,12 @@ Testronaut is in its initial development phase. Version 0.1.0 has been released 
 - Improved analyzer command identification in complex CLI tools
 - Increased overall test coverage to 72%
 - Fixed test warnings and implementation issues
+- ✅ Fixed the analyzer module to handle complex commands correctly
+- ✅ Improved CLI command testing structure
+- ✅ Renamed test classes to avoid pytest collection issues
+- ✅ Created a functional testing framework with complete workflow tests
+- ✅ Added appropriate test markers for different test types
+- ✅ Updated documentation to reflect the testing improvements
 
 #### Remaining Work
 - Add more functional tests for end-to-end workflows
@@ -76,13 +82,21 @@ Testronaut is in its initial development phase. Version 0.1.0 has been released 
 - Add negative test cases and edge case handling for complex commands
 - Fix remaining pytest collection warnings
 
+### Phase 002: CI/CD Pipeline (0% complete)
+
+#### Goals:
+- Set up GitHub Actions workflow for automated testing
+- Configure linting and code quality checks
+- Add build and deployment automation
+- Set up documentation generation
+
 ## Roadmap
 
 The implementation plan follows a sequential approach with some parallel development where possible:
 
 ### Infrastructure Phases (Weeks 1-2)
 - **Phase 000: Project Setup** - ✅ Completed
-- **Phase 001: Testing Infrastructure** - 🚧 In Progress (80%)
+- **Phase 001: Testing Infrastructure** - 🚧 In Progress (95%)
 - **Phase 002: CI/CD Pipeline** - Automating workflows
 - **Phase 003: Core Architecture** - Implementing base components
 
@@ -148,3 +162,18 @@ Current technical debt items to address:
 4. ✅ Analyzer improved for better subcommand detection
 5. 🚧 Collection warnings for test classes with constructors
 6. ❌ Error handling implementation needed
+
+## Prioritization
+
+Current priority is to complete Phase 001 by addressing the remaining test coverage issues, particularly in the CLI commands module, and then proceed to Phase 002.
+
+## Decisions
+
+- ✅ Rename TestCase, TestPlan and TestGenerator classes to avoid pytest collection warnings
+- ✅ Use a mock CLI implementation for functional tests to avoid dependency issues
+
+## Overall Progress
+
+- **Total phases completed**: 0.95/2 (47.5%)
+- **Current coverage**: 72%
+- **Current phase**: Phase 001 (Testing Infrastructure)

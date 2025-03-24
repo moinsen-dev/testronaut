@@ -1,58 +1,66 @@
 """
-Unit tests for CLI command modules.
+Unit tests for CLI commands.
 """
 
 import pytest
 from pathlib import Path
 from typer.testing import CliRunner
+from unittest.mock import patch
 
-from testronaut.cli.commands.analyze import app as analyze_app
-from testronaut.cli.commands.generate import app as generate_app
-from testronaut.cli.commands.verify import app as verify_app
-from testronaut.cli.commands.report import app as report_app
+from testronaut.cli.commands import analyze, generate, verify, report
+from testronaut.cli.main import app
 
 
+@pytest.mark.unit
 class TestAnalyzeCommand:
-    """Tests for the analyze command."""
+    """Unit tests for the analyze command."""
 
-    def test_analyze_command_help(self, cli_runner):
-        """Test the analyze command help."""
-        result = cli_runner.invoke(analyze_app, ["--help"])
+    def test_analyze_command_help(self):
+        """Test that analyze command help text is displayed."""
+        runner = CliRunner()
+        result = runner.invoke(analyze.app, ["--help"])
         assert result.exit_code == 0
         assert "Analyze CLI tool" in result.stdout
 
 
+@pytest.mark.unit
 class TestGenerateCommand:
-    """Tests for the generate command."""
+    """Unit tests for the generate command."""
 
-    def test_generate_command_help(self, cli_runner):
-        """Test the generate command help."""
-        result = cli_runner.invoke(generate_app, ["--help"])
+    def test_generate_command_help(self):
+        """Test that generate command help text is displayed."""
+        runner = CliRunner()
+        result = runner.invoke(generate.app, ["--help"])
         assert result.exit_code == 0
         assert "Generate test plan" in result.stdout
 
 
+@pytest.mark.unit
 class TestVerifyCommand:
-    """Tests for the verify command."""
+    """Unit tests for the verify command."""
 
-    def test_verify_command_help(self, cli_runner):
-        """Test the verify command help."""
-        result = cli_runner.invoke(verify_app, ["--help"])
+    def test_verify_command_help(self):
+        """Test that verify command help text is displayed."""
+        runner = CliRunner()
+        result = runner.invoke(verify.app, ["--help"])
         assert result.exit_code == 0
         assert "Execute tests and verify" in result.stdout
 
 
+@pytest.mark.unit
 class TestReportCommand:
-    """Tests for the report command."""
+    """Unit tests for the report command."""
 
-    def test_report_command_help(self, cli_runner):
-        """Test the report command help."""
-        result = cli_runner.invoke(report_app, ["--help"])
+    def test_report_command_help(self):
+        """Test that report command help text is displayed."""
+        runner = CliRunner()
+        result = runner.invoke(report.app, ["--help"])
         assert result.exit_code == 0
         assert "Generate test report" in result.stdout
 
-    def test_report_format_help(self, cli_runner):
-        """Test that the report command has a format option."""
-        result = cli_runner.invoke(report_app, ["--help"])
-        assert "format" in result.stdout.lower()
-        assert "html" in result.stdout.lower() or "report format" in result.stdout.lower()
+    def test_report_format_help(self):
+        """Test that report command format option is displayed."""
+        runner = CliRunner()
+        result = runner.invoke(report.app, ["--help"])
+        assert result.exit_code == 0
+        assert "--format" in result.stdout

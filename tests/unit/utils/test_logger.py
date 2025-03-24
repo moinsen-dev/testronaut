@@ -11,6 +11,7 @@ from unittest.mock import patch, MagicMock
 from testronaut.utils.logger import setup_logger
 
 
+@pytest.mark.unit
 class TestLogger:
     """Tests for the logger utility."""
 

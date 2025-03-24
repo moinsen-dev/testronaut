@@ -7,17 +7,18 @@ import os
 import json
 from pathlib import Path
 
-from testronaut.core.models import CliTool, TestPlan, TestCase, Command
+from testronaut.core.models import CliTool, Command
+from testronaut.core.models.test_plan import TPTestPlan, TPTestCase
 
 
-class TestGenerator:
+class TestPlanGenerator:
     """
     Generates test plans and test cases based on analyzed CLI tools.
     """
 
     def __init__(self, llm_manager=None, output_dir: str = None):
         """
-        Initialize the TestGenerator.
+        Initialize the TestPlanGenerator.
 
         Args:
             llm_manager: Optional LLM manager for enhanced test generation
@@ -27,7 +28,7 @@ class TestGenerator:
         self.output_dir = output_dir or os.path.join(os.getcwd(), "generated_tests")
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def generate_test_plan(self, cli_tool: CliTool) -> TestPlan:
+    def generate_test_plan(self, cli_tool: CliTool) -> TPTestPlan:
         """
         Generate a test plan for a CLI tool.
 
@@ -35,9 +36,9 @@ class TestGenerator:
             cli_tool: The CLI tool to generate tests for
 
         Returns:
-            A TestPlan object containing test cases
+            A TPTestPlan object containing test cases
         """
-        test_plan = TestPlan(
+        test_plan = TPTestPlan(
             tool_name=cli_tool.name,
             description=f"Test plan for {cli_tool.name}",
             version=cli_tool.version,
@@ -51,7 +52,7 @@ class TestGenerator:
 
         return test_plan
 
-    def _generate_command_test_cases(self, cli_tool: CliTool, command: Command) -> List[TestCase]:
+    def _generate_command_test_cases(self, cli_tool: CliTool, command: Command) -> List[TPTestCase]:
         """
         Generate test cases for a specific command.
 
@@ -60,12 +61,12 @@ class TestGenerator:
             command: The command to generate test cases for
 
         Returns:
-            List of TestCase objects
+            List of TPTestCase objects
         """
         test_cases = []
 
         # Basic help command test
-        help_test = TestCase(
+        help_test = TPTestCase(
             name=f"{command.name}_help_test",
             description=f"Test help output for {command.name}",
             command_line=f"{cli_tool.name} {command.name} --help",
@@ -77,7 +78,7 @@ class TestGenerator:
 
         # Basic execution test (if no required parameters)
         if not any(param.required for param in command.parameters):
-            basic_test = TestCase(
+            basic_test = TPTestCase(
                 name=f"{command.name}_basic_test",
                 description=f"Basic test for {command.name}",
                 command_line=f"{cli_tool.name} {command.name}",
@@ -100,7 +101,7 @@ class TestGenerator:
                 )
 
                 if param_str:
-                    param_test = TestCase(
+                    param_test = TPTestCase(
                         name=f"{command.name}_with_params_test",
                         description=f"Test {command.name} with parameters",
                         command_line=f"{cli_tool.name} {command.name} {param_str}",
@@ -119,8 +120,8 @@ class TestGenerator:
         return test_cases
 
     def _enhance_test_cases_with_llm(
-        self, cli_tool: CliTool, command: Command, test_cases: List[TestCase]
-    ) -> List[TestCase]:
+        self, cli_tool: CliTool, command: Command, test_cases: List[TPTestCase]
+    ) -> List[TPTestCase]:
         """
         Enhance test cases using LLM capabilities.
 
@@ -136,7 +137,7 @@ class TestGenerator:
         # For now, return the original test cases
         return test_cases
 
-    def save_test_plan(self, test_plan: TestPlan, output_format: str = "json") -> str:
+    def save_test_plan(self, test_plan: TPTestPlan, output_format: str = "json") -> str:
         """
         Save a test plan to a file.
 
@@ -160,7 +161,7 @@ class TestGenerator:
         else:
             raise ValueError(f"Unsupported output format: {output_format}")
 
-    def load_test_plan(self, file_path: str) -> TestPlan:
+    def load_test_plan(self, file_path: str) -> TPTestPlan:
         """
         Load a test plan from a file.
 
@@ -168,21 +169,21 @@ class TestGenerator:
             file_path: Path to the test plan file
 
         Returns:
-            The loaded TestPlan object
+            The loaded TPTestPlan object
         """
         file_extension = Path(file_path).suffix.lower()
 
         if file_extension == ".json":
             with open(file_path, "r") as f:
                 data = json.load(f)
-                return TestPlan.from_dict(data)
+                return TPTestPlan.from_dict(data)
         elif file_extension in [".yaml", ".yml"]:
             # Implementation for YAML would go here
             raise NotImplementedError("YAML input is not yet implemented")
         else:
             raise ValueError(f"Unsupported file format: {file_extension}")
 
-    def generate_pytest_file(self, test_plan: TestPlan) -> str:
+    def generate_pytest_file(self, test_plan: TPTestPlan) -> str:
         """
         Generate a pytest file from a test plan.
 

@@ -1,5 +1,8 @@
 """
 Integration tests for the analyzer and generator modules.
+
+These tests verify that the analyzer and generator can work together
+to analyze CLI tools and generate test plans.
 """
 
 import os
@@ -8,12 +11,15 @@ import tempfile
 import shutil
 import json
 from unittest.mock import patch, MagicMock
+from pathlib import Path
 
 from testronaut.core.analyzer import CliAnalyzer
-from testronaut.core.generator.generator import TestGenerator
-from testronaut.core.models import CliTool, TestPlan, TestCase
+from testronaut.core.generator.generator import TestPlanGenerator
+from testronaut.core.models import CliTool
+from testronaut.core.models.test_plan import TPTestPlan, TPTestCase
 
 
+@pytest.mark.integration
 class TestAnalyzerGeneratorIntegration:
     """Test cases for the integration between analyzer and generator."""
 
@@ -59,11 +65,11 @@ class TestAnalyzerGeneratorIntegration:
         assert len(cli_tool.commands) > 0
 
         # Create generator and generate test plan
-        generator = TestGenerator(output_dir=temp_output_dir)
+        generator = TestPlanGenerator(output_dir=temp_output_dir)
         test_plan = generator.generate_test_plan(cli_tool)
 
         # Verify the generated test plan
-        assert isinstance(test_plan, TestPlan)
+        assert isinstance(test_plan, TPTestPlan)
         assert test_plan.tool_name == "mytool"
         assert test_plan.version == "1.2.3"
         assert len(test_plan.test_cases) > 0
@@ -144,11 +150,11 @@ class TestAnalyzerGeneratorIntegration:
         assert "configure" in cli_tool.commands
 
         # Create generator and generate test plan
-        generator = TestGenerator(output_dir=temp_output_dir)
+        generator = TestPlanGenerator(output_dir=temp_output_dir)
         test_plan = generator.generate_test_plan(cli_tool)
 
         # Verify test plan for complex tool
-        assert isinstance(test_plan, TestPlan)
+        assert isinstance(test_plan, TPTestPlan)
         assert test_plan.tool_name == "complex-tool"
         assert test_plan.version == "2.0.0"
 

@@ -2,8 +2,9 @@
 Unit tests for the analyzer module.
 """
 
+import os
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, mock_open
 import subprocess
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from testronaut.core.analyzer import CliAnalyzer
 from testronaut.core.models import CliTool, Command, CommandParameter
 
 
+@pytest.mark.unit
 class TestCliAnalyzer:
     """Test cases for the CliAnalyzer class."""
 

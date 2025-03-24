@@ -4,8 +4,8 @@ Data models for the Testronaut application.
 
 from testronaut.core.models.cli_tool import CliTool, Command, CommandParameter
 from testronaut.core.models.test_plan import (
-    TestPlan,
-    TestCase,
+    TPTestPlan as TestPlan,
+    TPTestCase as TestCase,
     TestStep,
     TestStepType,
     TestCaseStatus
