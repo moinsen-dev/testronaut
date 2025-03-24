@@ -78,13 +78,16 @@ class StandardCLIAnalyzer(CLIAnalyzer):
                 f"Failed to get help text for {tool_name}", details={"error": str(e)}
             )
 
-    def get_command_help_text(self, tool_name: str, command_name: str) -> str:
+    def get_command_help_text(
+        self, tool_name: str, command_name: str, parent_path: str = ""
+    ) -> str:
         """
         Get the help text for a specific command of a CLI tool.
 
         Args:
             tool_name: The name of the CLI tool.
             command_name: The name of the command.
+            parent_path: The parent command path (if this is a subcommand).
 
         Returns:
             The help text as a string.
@@ -92,12 +95,18 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         Raises:
             CommandExecutionError: If the help command cannot be executed.
         """
-        logger.debug(f"Getting help text for command: {tool_name} {command_name}")
+        # Build the full command path
+        if parent_path:
+            full_cmd = f"{tool_name} {parent_path} {command_name}"
+        else:
+            full_cmd = f"{tool_name} {command_name}"
+
+        logger.debug(f"Getting help text for command: {full_cmd}")
 
         # Try different help options
         for help_option in self.help_options:
             try:
-                result = self.command_runner.run(f"{tool_name} {command_name} {help_option}")
+                result = self.command_runner.run(f"{full_cmd} {help_option}")
                 if result.succeeded:
                     return result.output
             except CommandExecutionError:
@@ -112,7 +121,7 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             pass
 
         raise CommandExecutionError(
-            f"Failed to get help text for command {tool_name} {command_name}",
+            f"Failed to get help text for command {full_cmd}",
             details={"attempted_options": self.help_options},
         )
 
@@ -158,6 +167,7 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         """
         logger.debug(f"Extracting commands for tool: {tool_name}")
         commands = []
+        existing_cmd_names = set()  # Track command names to avoid duplicates
 
         # Look for the "Commands" section in the help text
         # This pattern works for rich-formatted CLI help (like Typer with rich formatting)
@@ -192,7 +202,10 @@ class StandardCLIAnalyzer(CLIAnalyzer):
                             r"[\u2500\u256d\u256e\u2570\u256f\u2502]", "", cmd_desc
                         ).strip()
 
-                    commands.append({"name": cmd_name, "description": cmd_desc})
+                    # Check for duplicates (case-insensitive)
+                    if cmd_name.lower() not in existing_cmd_names:
+                        commands.append({"name": cmd_name, "description": cmd_desc})
+                        existing_cmd_names.add(cmd_name.lower())
 
         # If no commands were found with the above pattern, try simpler patterns
         if not commands:
@@ -212,12 +225,13 @@ class StandardCLIAnalyzer(CLIAnalyzer):
                     if isinstance(matches[0], tuple):
                         # If matches are tuples, we have command and description
                         for match in matches:
-                            commands.append(
-                                {
-                                    "name": match[0].strip(),
-                                    "description": match[1].strip() if len(match) > 1 else None,
-                                }
-                            )
+                            cmd_name = match[0].strip()
+                            cmd_desc = match[1].strip() if len(match) > 1 else None
+
+                            # Check for duplicates (case-insensitive)
+                            if cmd_name.lower() not in existing_cmd_names:
+                                commands.append({"name": cmd_name, "description": cmd_desc})
+                                existing_cmd_names.add(cmd_name.lower())
                     else:
                         # Otherwise, we have a block of text with commands
                         for block in matches:
@@ -226,7 +240,11 @@ class StandardCLIAnalyzer(CLIAnalyzer):
                                     parts = line.strip().split(maxsplit=1)
                                     cmd_name = parts[0].strip()
                                     cmd_desc = parts[1].strip() if len(parts) > 1 else None
-                                    commands.append({"name": cmd_name, "description": cmd_desc})
+
+                                    # Check for duplicates (case-insensitive)
+                                    if cmd_name.lower() not in existing_cmd_names:
+                                        commands.append({"name": cmd_name, "description": cmd_desc})
+                                        existing_cmd_names.add(cmd_name.lower())
 
         logger.debug(f"Extracted {len(commands)} commands from help text")
         return commands
@@ -344,10 +362,29 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         tool_name = command.cli_tool.name
         command_name = command.name
 
+        # Build parent path for subcommands
+        parent_path = ""
+        if command.is_subcommand and command.parent_command_id:
+            # Find the parent command by ID
+            parent_command = None
+            for cmd in command.cli_tool.commands:
+                if hasattr(cmd, "id") and cmd.id == command.parent_command_id:
+                    parent_command = cmd
+                    break
+
+            if parent_command and hasattr(parent_command, "name"):
+                parent_path = parent_command.name
+
+        # Build the full command path
+        if parent_path:
+            full_cmd = f"{tool_name} {parent_path} {command_name}"
+        else:
+            full_cmd = f"{tool_name} {command_name}"
+
         try:
-            help_text = self.get_command_help_text(tool_name, command_name)
+            help_text = self.get_command_help_text(tool_name, command_name, parent_path)
         except CommandExecutionError:
-            logger.warning(f"Could not get help text for {tool_name} {command_name}")
+            logger.warning(f"Could not get help text for {full_cmd}")
             return []
 
         examples = []
@@ -399,7 +436,20 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         logger.debug(f"Updating information for command: {command.name}")
 
         try:
-            help_text = self.get_command_help_text(command.cli_tool.name, command.name)
+            # Build parent path for subcommands
+            parent_path = ""
+            if command.is_subcommand and command.parent_command_id:
+                # Find the parent command by ID
+                parent_command = None
+                for cmd in command.cli_tool.commands:
+                    if hasattr(cmd, "id") and cmd.id == command.parent_command_id:
+                        parent_command = cmd
+                        break
+
+                if parent_command and hasattr(parent_command, "name"):
+                    parent_path = parent_command.name
+
+            help_text = self.get_command_help_text(command.cli_tool.name, command.name, parent_path)
             command.help_text = help_text
 
             # Extract syntax if available
@@ -447,6 +497,40 @@ class StandardCLIAnalyzer(CLIAnalyzer):
                     description=example_data.get("description"),
                 )
                 command.examples.append(example)
+
+            # Extract subcommands by analyzing help text for this command
+            # Build the command path for subcommand extraction
+            cmd_path = command.name
+            if parent_path:
+                cmd_path = f"{parent_path} {cmd_path}"
+
+            subcommands_data = self.extract_commands(
+                f"{command.cli_tool.name} {cmd_path}", help_text
+            )
+
+            # Process subcommands
+            for subcmd_data in subcommands_data:
+                subcmd_name = subcmd_data.get("name", "")
+                # Create a new command with the parent command as a prefix
+                subcmd = Command(
+                    cli_tool_id=command.cli_tool.id,
+                    name=subcmd_name,
+                    description=subcmd_data.get("description"),
+                    parent_command_id=command.id,
+                    is_subcommand=True,
+                )
+
+                # Set the cli_tool reference explicitly
+                subcmd.cli_tool = command.cli_tool
+
+                # Add to the parent command's subcommands
+                command.subcommands.append(subcmd)
+
+                # Recursively analyze this subcommand to get its details
+                try:
+                    self.update_command_info(subcmd)
+                except CommandExecutionError:
+                    logger.warning(f"Could not analyze subcommand: {subcmd_name}")
 
             return command
         except CommandExecutionError as e:
@@ -507,9 +591,108 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             )
             cli_tool.commands.append(command)
 
-        # Update each command with more detailed information
+        # Update each command with more detailed information and recursively analyze subcommands
         for command in cli_tool.commands:
             self.update_command_info(command)
 
-        logger.info(f"Completed analysis of {tool_name}, found {len(cli_tool.commands)} commands")
+        # Clean up duplicate commands with different capitalization
+        self._clean_up_duplicate_commands(cli_tool)
+
+        logger.info(
+            f"Completed analysis of {tool_name}, found {len(cli_tool.commands)} top-level commands"
+        )
+
+        # Count total commands including subcommands
+        total_commands = len(cli_tool.commands)
+        for cmd in cli_tool.commands:
+            total_commands += self._count_subcommands(cmd)
+
+        logger.info(f"Total commands including subcommands: {total_commands}")
         return cli_tool
+
+    def _clean_up_duplicate_commands(self, cli_tool: CLITool) -> None:
+        """
+        Clean up duplicate commands with different capitalization.
+
+        Args:
+            cli_tool: The CLI tool to clean up.
+        """
+        # Track commands by lowercase name
+        commands_by_name: Dict[str, Command] = {}
+        duplicates_to_remove: List[Command] = []
+
+        # First, identify duplicates
+        for cmd in cli_tool.commands:
+            if not hasattr(cmd, "name"):
+                continue
+
+            lower_name = cmd.name.lower()
+            if lower_name in commands_by_name:
+                # Keep the one with the lowercase name or the first one found
+                if hasattr(cmd, "name") and cmd.name.islower():
+                    duplicates_to_remove.append(commands_by_name[lower_name])
+                    commands_by_name[lower_name] = cmd
+                else:
+                    duplicates_to_remove.append(cmd)
+            else:
+                commands_by_name[lower_name] = cmd
+
+        # Remove duplicates
+        for cmd in duplicates_to_remove:
+            if cmd in cli_tool.commands:
+                cli_tool.commands.remove(cmd)
+
+        # Do the same for subcommands
+        for cmd in cli_tool.commands:
+            self._clean_up_duplicate_subcommands(cmd)
+
+    def _clean_up_duplicate_subcommands(self, command: Command) -> None:
+        """
+        Clean up duplicate subcommands with different capitalization.
+
+        Args:
+            command: The command to clean up subcommands for.
+        """
+        # Track subcommands by lowercase name
+        subcommands_by_name: Dict[str, Command] = {}
+        duplicates_to_remove: List[Command] = []
+
+        # First, identify duplicates
+        for subcmd in command.subcommands:
+            if not hasattr(subcmd, "name"):
+                continue
+
+            lower_name = subcmd.name.lower()
+            if lower_name in subcommands_by_name:
+                # Keep the one with the lowercase name or the first one found
+                if hasattr(subcmd, "name") and subcmd.name.islower():
+                    duplicates_to_remove.append(subcommands_by_name[lower_name])
+                    subcommands_by_name[lower_name] = subcmd
+                else:
+                    duplicates_to_remove.append(subcmd)
+            else:
+                subcommands_by_name[lower_name] = subcmd
+
+        # Remove duplicates
+        for subcmd in duplicates_to_remove:
+            if subcmd in command.subcommands:
+                command.subcommands.remove(subcmd)
+
+        # Do the same for nested subcommands
+        for subcmd in command.subcommands:
+            self._clean_up_duplicate_subcommands(subcmd)
+
+    def _count_subcommands(self, command: Command) -> int:
+        """
+        Recursively count subcommands of a command.
+
+        Args:
+            command: The command to count subcommands for.
+
+        Returns:
+            The total number of subcommands.
+        """
+        count = len(command.subcommands)
+        for subcmd in command.subcommands:
+            count += self._count_subcommands(subcmd)
+        return count

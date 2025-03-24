@@ -213,26 +213,26 @@ def analyze_tool(
         # Add commands as a top-level list
         commands_list = []
         for cmd in cli_tool.commands:
-            cmd_dict = cmd.dict(exclude={"id", "cli_tool", "cli_tool_id"})
+            cmd_dict = cmd.dict(exclude={"cli_tool", "cli_tool_id"})
 
             # Process options
             options_list = []
             for opt in cmd.options:
-                opt_dict = opt.dict(exclude={"id", "command", "command_id"})
+                opt_dict = opt.dict(exclude={"command", "command_id"})
                 options_list.append(opt_dict)
             cmd_dict["options"] = options_list
 
             # Process arguments
             args_list = []
             for arg in cmd.arguments:
-                arg_dict = arg.dict(exclude={"id", "command", "command_id"})
+                arg_dict = arg.dict(exclude={"command", "command_id"})
                 args_list.append(arg_dict)
             cmd_dict["arguments"] = args_list
 
             # Process examples
             examples_list = []
             for ex in cmd.examples:
-                ex_dict = ex.dict(exclude={"id", "command", "command_id"})
+                ex_dict = ex.dict(exclude={"command", "command_id"})
                 examples_list.append(ex_dict)
             cmd_dict["examples"] = examples_list
 
