@@ -23,6 +23,7 @@ from testronaut import __version__
 from testronaut.config import Settings, get_config_path, initialize_config, update_config
 from testronaut.factory import registry
 from testronaut.utils.errors import CommandExecutionError, ValidationError
+from testronaut.utils.llm import LLMService
 from testronaut.utils.logging import configure_logging, get_logger
 
 # Initialize console and logger
@@ -106,43 +107,60 @@ def config_show():
     try:
         settings = Settings()
 
-        # Create a rich table for display
+        # Create a rich table
         table = Table(title="Testronaut Configuration", box=box.ROUNDED)
         table.add_column("Setting", style="cyan")
         table.add_column("Value", style="green")
 
-        # Add settings to table
+        # Add general settings
         table.add_row("App Name", settings.app_name)
         table.add_row("Debug Mode", str(settings.debug))
         table.add_row("Config Path", str(settings.config_path))
 
-        # Database settings
-        table.add_row("Database URL", str(settings.database.url))
+        # Add database settings
+        table.add_row("Database URL", settings.database.url)
 
-        # Logging settings
+        # Add logging settings
         table.add_row("Log Level", settings.logging.level)
         table.add_row("Log Format", settings.logging.format)
 
-        # LLM settings
+        # Add LLM settings
         table.add_row("LLM Provider", settings.llm.provider)
 
-        # Display available attributes instead of hardcoded ones that might not exist
-        # Display LLM model if available
-        if hasattr(settings.llm, "model_name"):
-            table.add_row("LLM Model", settings.llm.model_name)
+        # Get the current provider settings
+        provider_settings = settings.llm.current_provider_settings
+        models = provider_settings.get("models", {})
 
-        # Display execution settings if available
+        # Add model information if available
+        if "default" in models:
+            table.add_row("LLM Default Model", models["default"])
+        else:
+            table.add_row("LLM Model", settings.llm.model)
+
+        # Show API key status (but not the actual key)
+        api_key_status = "Configured" if provider_settings.get("api_key") else "Not configured"
+        table.add_row("LLM API Key", api_key_status)
+
+        # Show task-specific models if configured
+        for task, model in models.items():
+            if task != "default":
+                table.add_row(f"LLM {task.capitalize()} Model", model)
+
+        # Add execution settings if they exist and have values
         if hasattr(settings, "execution"):
-            if hasattr(settings.execution, "default_image"):
-                table.add_row("Default Image", settings.execution.default_image)
-            if hasattr(settings.execution, "timeout_seconds"):
-                table.add_row("Timeout", str(settings.execution.timeout_seconds))
+            execution = settings.execution
+            if hasattr(execution, "docker_image"):
+                table.add_row("Default Docker Image", execution.docker_image)
+            if hasattr(execution, "timeout"):
+                table.add_row("Default Timeout", f"{execution.timeout} seconds")
 
+        # Print the table
         console.print(table)
+
         return 0
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {str(e)}")
-        logger.exception("Failed to show configuration")
+        console.print(f"[bold red]Error showing configuration:[/bold red] {str(e)}")
+        logger.exception(f"Error showing configuration: {str(e)}")
         return 1
 
 
@@ -192,25 +210,35 @@ def analyze_tool(
         # Convert model to dictionary
         tool_dict = cli_tool.dict(exclude={"id"})
 
-        # Replace command and option IDs with more readable identifiers
-        for i, cmd in enumerate(tool_dict.get("commands", [])):
-            cmd_id = cmd.pop("id", None)
-            cmd["index"] = i
+        # Add commands as a top-level list
+        commands_list = []
+        for cmd in cli_tool.commands:
+            cmd_dict = cmd.dict(exclude={"id", "cli_tool", "cli_tool_id"})
 
             # Process options
-            for j, opt in enumerate(cmd.get("options", [])):
-                opt_id = opt.pop("id", None)
-                opt["index"] = j
+            options_list = []
+            for opt in cmd.options:
+                opt_dict = opt.dict(exclude={"id", "command", "command_id"})
+                options_list.append(opt_dict)
+            cmd_dict["options"] = options_list
 
             # Process arguments
-            for j, arg in enumerate(cmd.get("arguments", [])):
-                arg_id = arg.pop("id", None)
-                arg["index"] = j
+            args_list = []
+            for arg in cmd.arguments:
+                arg_dict = arg.dict(exclude={"id", "command", "command_id"})
+                args_list.append(arg_dict)
+            cmd_dict["arguments"] = args_list
 
             # Process examples
-            for j, ex in enumerate(cmd.get("examples", [])):
-                ex_id = ex.pop("id", None)
-                ex["index"] = j
+            examples_list = []
+            for ex in cmd.examples:
+                ex_dict = ex.dict(exclude={"id", "command", "command_id"})
+                examples_list.append(ex_dict)
+            cmd_dict["examples"] = examples_list
+
+            commands_list.append(cmd_dict)
+
+        tool_dict["commands"] = commands_list
 
         # Write to file
         with open(output_file, "w") as f:
@@ -262,6 +290,48 @@ def verify_results(
     console.print(f"Verifying results in: [bold]{results_dir}[/bold]")
     console.print("[yellow]This functionality is still being implemented[/yellow]")
     return 0
+
+
+@config_app.command("test-llm")
+def test_llm():
+    """Test the LLM service configuration."""
+    try:
+        # Create the LLM service
+        service = LLMService()
+
+        # Get provider information
+        provider_name = service.provider_name
+        model = service.settings.llm.get_model_for_task("chat")
+
+        console.print(
+            f"Testing LLM service with provider: [bold]{provider_name}[/bold], model: [bold]{model}[/bold]"
+        )
+
+        # Generate a simple response
+        prompt = (
+            "Generate a short test message to verify that the LLM service is working correctly."
+        )
+
+        with console.status("Generating response...", spinner="dots"):
+            response = service.generate_text(prompt, max_tokens=100)
+
+        # Display the response
+        console.print(
+            "\n[bold green]═══════════════════════ LLM Response ═══════════════════════[/bold green]"
+        )
+        console.print(response)
+        console.print(f"[dim]Provider: {provider_name}, Model: {model}[/dim]")
+        console.print(
+            "[bold green]═══════════════════════════════════════════════════════════[/bold green]\n"
+        )
+
+        console.print("[bold green]LLM service test successful![/bold green]")
+        return 0
+
+    except Exception as e:
+        console.print(f"[bold red]Error testing LLM service:[/bold red] {str(e)}")
+        logger.exception(f"Error testing LLM service: {str(e)}")
+        return 1
 
 
 if __name__ == "__main__":

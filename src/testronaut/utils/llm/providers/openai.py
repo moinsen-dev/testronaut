@@ -4,13 +4,14 @@ OpenAI LLM Provider.
 This module provides an implementation of the LLM provider interface
 for the OpenAI API.
 """
-import os
+
 import json
-from typing import Dict, List, Any, Optional, Union, cast
+import os
+from typing import Any, Dict, List, Optional
 
 from testronaut.utils.errors import LLMServiceError
-from testronaut.utils.logging import get_logger
 from testronaut.utils.llm import LLMProviderRegistry
+from testronaut.utils.logging import get_logger
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -20,6 +21,7 @@ try:
     import openai
     from openai import OpenAI
     from openai.types.chat import ChatCompletion
+
     OPENAI_AVAILABLE = True
 except ImportError:
     logger.warning("OpenAI library not available. Install with 'pip install openai'")
@@ -33,9 +35,7 @@ class OpenAIProvider:
     def __init__(self):
         """Initialize the OpenAI provider."""
         if not OPENAI_AVAILABLE:
-            raise ImportError(
-                "OpenAI library not available. Install with 'pip install openai'"
-            )
+            raise ImportError("OpenAI library not available. Install with 'pip install openai'")
 
         self.client = None
         self.api_key = None
@@ -50,6 +50,9 @@ class OpenAIProvider:
         Args:
             settings: Provider-specific settings.
         """
+        # Store provider settings for later use
+        self._provider_settings = settings
+
         # Get API key from settings or environment
         self.api_key = settings.get("api_key") or os.environ.get("OPENAI_API_KEY")
 
@@ -58,12 +61,18 @@ class OpenAIProvider:
                 "OpenAI API key not provided",
                 details={
                     "solution": "Set 'api_key' in provider settings or the OPENAI_API_KEY environment variable"
-                }
+                },
             )
 
         # Get optional settings
         self.organization = settings.get("organization") or os.environ.get("OPENAI_ORGANIZATION")
-        self.model = settings.get("model", "gpt-3.5-turbo")
+
+        # Get the model from settings or use default
+        self.model = settings.get("model")
+        if not self.model:
+            models = settings.get("models", {})
+            self.model = models.get("default", "gpt-3.5-turbo")
+
         self.base_url = settings.get("base_url")
 
         # Initialize the client
@@ -78,17 +87,11 @@ class OpenAIProvider:
 
             self.client = OpenAI(**client_kwargs)
 
-            logger.info(
-                "OpenAI provider initialized",
-                model=self.model,
-                has_organization=bool(self.organization),
-                has_base_url=bool(self.base_url)
-            )
+            logger.info("Initialized OpenAI provider", model=self.model)
 
         except Exception as e:
             raise LLMServiceError(
-                "Failed to initialize OpenAI client",
-                details={"error": str(e)}
+                "Failed to initialize OpenAI client", details={"error": str(e)}
             ) from e
 
     def generate_text(
@@ -97,7 +100,7 @@ class OpenAIProvider:
         system_prompt: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: float = 0.7,
-        stop_sequences: Optional[List[str]] = None
+        stop_sequences: Optional[List[str]] = None,
     ) -> str:
         """
         Generate text from OpenAI models based on a prompt.
@@ -115,7 +118,7 @@ class OpenAIProvider:
         if not self.client:
             raise LLMServiceError(
                 "OpenAI client not initialized",
-                details={"solution": "Call initialize() before generating text"}
+                details={"solution": "Call initialize() before generating text"},
             )
 
         try:
@@ -148,7 +151,7 @@ class OpenAIProvider:
                 "Sending request to OpenAI",
                 model=self.model,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
             )
 
             response = self.client.chat.completions.create(**params)
@@ -156,8 +159,7 @@ class OpenAIProvider:
             # Extract the generated text
             if not response.choices:
                 raise LLMServiceError(
-                    "OpenAI returned no choices",
-                    details={"response": str(response)}
+                    "OpenAI returned no choices", details={"response": str(response)}
                 )
 
             generated_text = response.choices[0].message.content or ""
@@ -166,14 +168,13 @@ class OpenAIProvider:
 
         except openai.OpenAIError as e:
             raise LLMServiceError(
-                "OpenAI API error",
-                details={"error": str(e), "model": self.model}
+                "OpenAI API error", details={"error": str(e), "model": self.model}
             ) from e
 
         except Exception as e:
             raise LLMServiceError(
                 "Failed to generate text with OpenAI",
-                details={"error": str(e), "model": self.model}
+                details={"error": str(e), "model": self.model},
             ) from e
 
     def generate_json(
@@ -181,13 +182,13 @@ class OpenAIProvider:
         prompt: str,
         schema: Dict[str, Any],
         system_prompt: Optional[str] = None,
-        temperature: float = 0.2
+        temperature: float = 0.2,
     ) -> Dict[str, Any]:
         """
-        Generate structured JSON output from OpenAI models.
+        Generate structured JSON output from the LLM based on a prompt and schema.
 
         Args:
-            prompt: The user prompt to send to the model.
+            prompt: The user prompt to send to the LLM.
             schema: JSON schema defining the expected structure.
             system_prompt: Optional system prompt for context.
             temperature: Sampling temperature (0.0 to 1.0).
@@ -195,38 +196,74 @@ class OpenAIProvider:
         Returns:
             Generated structured data conforming to the schema.
         """
-        if not self.client:
-            raise LLMServiceError(
-                "OpenAI client not initialized",
-                details={"solution": "Call initialize() before generating JSON"}
-            )
-
         try:
-            # Check if we can use OpenAI's native JSON mode
-            # This is available for newer models like GPT-4 Turbo
-            can_use_json_mode = any(model in self.model for model in [
-                "gpt-4-turbo", "gpt-4-0125", "gpt-4-1106", "gpt-4-vision"
-            ])
+            # Get model specific information from provider settings
+            # Use a model from provider settings if available
+            provider_settings = getattr(self, "_provider_settings", {}) or {}
+            models = provider_settings.get("models", {})
+            json_model = models.get("json")
 
-            if can_use_json_mode:
-                # Use OpenAI's native JSON mode
-                return self._generate_json_with_native_mode(prompt, schema, system_prompt, temperature)
-            else:
-                # Use system prompt instructions for JSON formatting
-                return self._generate_json_with_instructions(prompt, schema, system_prompt, temperature)
+            # Override self.model specifically for this call if json model is configured
+            current_model = self.model
+            if json_model:
+                self.model = json_model
+
+            try:
+                # First try with native JSON mode
+                if self._model_supports_json_mode(self.model):
+                    return self._generate_json_with_native_mode(
+                        prompt=prompt,
+                        schema=schema,
+                        system_prompt=system_prompt,
+                        temperature=temperature,
+                    )
+                else:
+                    # Fall back to instruction-based approach
+                    return self._generate_json_with_instructions(
+                        prompt=prompt,
+                        schema=schema,
+                        system_prompt=system_prompt,
+                        temperature=temperature,
+                    )
+            finally:
+                # Restore the original model
+                self.model = current_model
 
         except Exception as e:
             raise LLMServiceError(
-                "Failed to generate JSON with OpenAI",
-                details={"error": str(e), "model": self.model}
+                "Failed to generate JSON with OpenAI", details={"error": str(e)}
             ) from e
+
+    def _model_supports_json_mode(self, model: str) -> bool:
+        """
+        Determine if a model supports native JSON mode.
+
+        Args:
+            model: The model name to check
+
+        Returns:
+            True if the model supports native JSON mode
+        """
+        # Models that support native JSON mode
+        json_mode_models = [
+            "gpt-4o",
+            "gpt-4-turbo",
+            "gpt-4-0125",
+            "gpt-4-1106",
+            "gpt-4-vision",
+            "gpt-3.5-turbo-1106",
+            "gpt-3.5-turbo-0125",
+        ]
+
+        # Check if any of the supported model names are in the provided model name
+        return any(supported_model in model for supported_model in json_mode_models)
 
     def _generate_json_with_native_mode(
         self,
         prompt: str,
         schema: Dict[str, Any],
         system_prompt: Optional[str] = None,
-        temperature: float = 0.2
+        temperature: float = 0.2,
     ) -> Dict[str, Any]:
         """
         Generate structured JSON using OpenAI's native JSON mode.
@@ -254,7 +291,7 @@ class OpenAIProvider:
         # Prepare messages
         messages = [
             {"role": "system", "content": full_system_prompt},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ]
 
         # Make the API call with response_format=json
@@ -262,23 +299,20 @@ class OpenAIProvider:
             model=self.model,
             messages=messages,
             temperature=temperature,
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
         )
 
         # Extract and parse the JSON response
         content = response.choices[0].message.content
         if not content:
-            raise LLMServiceError(
-                "OpenAI returned empty content",
-                details={"model": self.model}
-            )
+            raise LLMServiceError("OpenAI returned empty content", details={"model": self.model})
 
         try:
             return json.loads(content)
         except json.JSONDecodeError as e:
             raise LLMServiceError(
                 "Failed to parse JSON response from OpenAI",
-                details={"error": str(e), "content": content}
+                details={"error": str(e), "content": content},
             ) from e
 
     def _generate_json_with_instructions(
@@ -286,7 +320,7 @@ class OpenAIProvider:
         prompt: str,
         schema: Dict[str, Any],
         system_prompt: Optional[str] = None,
-        temperature: float = 0.2
+        temperature: float = 0.2,
     ) -> Dict[str, Any]:
         """
         Generate structured JSON using system prompt instructions.
@@ -313,9 +347,7 @@ class OpenAIProvider:
 
         # Generate the text that should contain JSON
         response_text = self.generate_text(
-            prompt=prompt,
-            system_prompt=full_system_prompt,
-            temperature=temperature
+            prompt=prompt, system_prompt=full_system_prompt, temperature=temperature
         )
 
         # Clean the response to extract just the JSON part
@@ -329,7 +361,7 @@ class OpenAIProvider:
                 "Failed to parse JSON response",
                 error=str(e),
                 response=response_text,
-                cleaned_response=cleaned_response
+                cleaned_response=cleaned_response,
             )
 
             # Make a second attempt with more explicit instructions
@@ -348,7 +380,9 @@ class OpenAIProvider:
             retry_response = self.generate_text(
                 prompt=retry_prompt,
                 system_prompt=retry_system_prompt,
-                temperature=min(temperature, 0.1)  # Lower temperature for more deterministic output
+                temperature=min(
+                    temperature, 0.1
+                ),  # Lower temperature for more deterministic output
             )
 
             # Clean up and retry parsing
@@ -363,8 +397,8 @@ class OpenAIProvider:
                         "error": str(e2),
                         "original_response": response_text,
                         "retry_response": retry_response,
-                        "cleaned_retry": cleaned_retry
-                    }
+                        "cleaned_retry": cleaned_retry,
+                    },
                 ) from e2
 
     def _extract_json_from_text(self, text: str) -> str:
@@ -394,7 +428,7 @@ class OpenAIProvider:
             # Find the last closing brace
             last_brace_idx = text.rfind("}")
             if last_brace_idx > start_idx:
-                return text[start_idx:last_brace_idx + 1]
+                return text[start_idx : last_brace_idx + 1]
 
         # If we couldn't find a better subset, just return the original text
         return text.strip()

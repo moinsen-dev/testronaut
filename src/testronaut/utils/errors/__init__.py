@@ -4,7 +4,11 @@ Error handling module for Testronaut.
 This module defines the exception hierarchy and error handling utilities
 for the Testronaut application.
 """
-from typing import Optional, Any, Dict, Type
+
+import inspect
+import json
+import traceback
+from typing import Any, Dict, Optional, Type
 
 
 class TestronautError(Exception):
@@ -25,43 +29,58 @@ class TestronautError(Exception):
 
 class ConfigurationError(TestronautError):
     """Error related to configuration issues."""
+
     pass
 
 
 class MissingConfigError(ConfigurationError):
     """Error for missing configuration items."""
+
     pass
 
 
 class InvalidConfigError(ConfigurationError):
     """Error for invalid configuration values."""
+
     pass
 
 
 class ValidationError(TestronautError):
     """Error for data validation failures."""
+
     pass
 
 
 class InvalidInputError(ValidationError):
     """Error for invalid user input."""
+
     pass
 
 
 class SchemaValidationError(ValidationError):
     """Error for schema validation failures."""
+
     pass
 
 
 class ExecutionError(TestronautError):
     """Error during test execution."""
+
     pass
 
 
 class CommandExecutionError(ExecutionError):
     """Error during command execution."""
 
-    def __init__(self, message: str, command: str, exit_code: int, stdout: str, stderr: str):
+    def __init__(
+        self,
+        message: str,
+        command: Optional[str] = None,
+        exit_code: Optional[int] = None,
+        stdout: Optional[str] = None,
+        stderr: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize the error.
 
@@ -71,28 +90,38 @@ class CommandExecutionError(ExecutionError):
             exit_code: The command's exit code
             stdout: The command's standard output
             stderr: The command's standard error
+            details: Additional error details
         """
-        details = {
-            "command": command,
-            "exit_code": exit_code,
-            "stdout": stdout,
-            "stderr": stderr
-        }
+        if details is None:
+            details = {}
+
+        if command is not None:
+            details["command"] = command
+        if exit_code is not None:
+            details["exit_code"] = exit_code
+        if stdout is not None:
+            details["stdout"] = stdout
+        if stderr is not None:
+            details["stderr"] = stderr
+
         super().__init__(message, details)
 
 
 class DockerError(ExecutionError):
     """Error related to Docker operations."""
+
     pass
 
 
 class TimeoutError(ExecutionError):
     """Error for execution timeouts."""
+
     pass
 
 
 class VerificationError(TestronautError):
     """Error during result verification."""
+
     pass
 
 
@@ -109,36 +138,37 @@ class ResultMismatchError(VerificationError):
             actual: The actual value
             comparison: Optional comparison details
         """
-        details = {
-            "expected": expected,
-            "actual": actual,
-            "comparison": comparison
-        }
+        details = {"expected": expected, "actual": actual, "comparison": comparison}
         super().__init__(message, details)
 
 
 class SemanticComparisonError(VerificationError):
     """Error during semantic comparison of results."""
+
     pass
 
 
 class ConnectivityError(TestronautError):
     """Error related to external connectivity."""
+
     pass
 
 
 class DatabaseError(ConnectivityError):
     """Error for database operations."""
+
     pass
 
 
 class LLMServiceError(ConnectivityError):
     """Error when communicating with LLM services."""
+
     pass
 
 
 class FileSystemError(ConnectivityError):
     """Error during file system operations."""
+
     pass
 
 

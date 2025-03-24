@@ -3,13 +3,14 @@ LLM Service Integration Utilities.
 
 This module provides utilities for integrating with various LLM providers.
 """
-from typing import Dict, List, Any, Optional, Union, Callable, Protocol, Type
+
 import importlib
 import json
+from typing import Any, Callable, Dict, List, Optional, Protocol, Type, Union
 
+from testronaut.config import Settings
 from testronaut.utils.errors import LLMServiceError
 from testronaut.utils.logging import get_logger
-from testronaut.config import Settings
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -33,7 +34,7 @@ class LLMProvider(Protocol):
         system_prompt: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: float = 0.7,
-        stop_sequences: Optional[List[str]] = None
+        stop_sequences: Optional[List[str]] = None,
     ) -> str:
         """
         Generate text from the LLM based on a prompt.
@@ -55,7 +56,7 @@ class LLMProvider(Protocol):
         prompt: str,
         schema: Dict[str, Any],
         system_prompt: Optional[str] = None,
-        temperature: float = 0.2
+        temperature: float = 0.2,
     ) -> Dict[str, Any]:
         """
         Generate structured JSON output from the LLM based on a prompt and schema.
@@ -88,9 +89,11 @@ class LLMProviderRegistry:
         Returns:
             Decorator function that registers the provider.
         """
+
         def decorator(provider_cls: Type[LLMProvider]) -> Type[LLMProvider]:
             cls._providers[name] = provider_cls
             return provider_cls
+
         return decorator
 
     @classmethod
@@ -112,8 +115,8 @@ class LLMProviderRegistry:
                 f"LLM provider '{name}' not found",
                 details={
                     "available_providers": list(cls._providers.keys()),
-                    "requested_provider": name
-                }
+                    "requested_provider": name,
+                },
             )
         return cls._providers[name]
 
@@ -140,7 +143,7 @@ class LLMService:
         """
         self.settings = settings or Settings()
         self.provider_name = self.settings.llm.provider
-        self.provider_settings = self.settings.llm.provider_settings
+        self.provider_settings = self.settings.llm.current_provider_settings
         self._provider: Optional[LLMProvider] = None
 
         # Import provider modules to register them
@@ -150,6 +153,9 @@ class LLMService:
             importlib.import_module("testronaut.utils.llm.providers")
         except ImportError:
             logger.warning("Failed to import LLM provider modules")
+
+        logger.info(f"LLM service initialized with provider: {self.provider_name}")
+        logger.debug(f"Using model: {self.settings.llm.model}")
 
     @property
     def provider(self) -> LLMProvider:
@@ -168,14 +174,14 @@ class LLMService:
                 self._provider = provider_cls()
 
                 # Initialize it with settings
-                self._provider.initialize(self.provider_settings or {})
+                self._provider.initialize(self.provider_settings)
 
                 logger.info(f"Initialized LLM provider: {self.provider_name}")
 
             except Exception as e:
                 raise LLMServiceError(
                     f"Failed to initialize LLM provider: {self.provider_name}",
-                    details={"error": str(e)}
+                    details={"error": str(e)},
                 ) from e
 
         return self._provider
@@ -186,7 +192,7 @@ class LLMService:
         system_prompt: Optional[str] = None,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
-        stop_sequences: Optional[List[str]] = None
+        stop_sequences: Optional[List[str]] = None,
     ) -> str:
         """
         Generate text from the LLM based on a prompt.
@@ -210,12 +216,15 @@ class LLMService:
             if max_tokens is None:
                 max_tokens = self.settings.llm.max_tokens
 
+            model = self.settings.llm.get_model_for_task("chat")
+
             logger.debug(
                 "Generating text with LLM",
                 provider=self.provider_name,
+                model=model,
                 system_prompt_length=len(system_prompt) if system_prompt else 0,
                 prompt_length=len(prompt),
-                temperature=temperature
+                temperature=temperature,
             )
 
             result = self.provider.generate_text(
@@ -223,13 +232,11 @@ class LLMService:
                 system_prompt=system_prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                stop_sequences=stop_sequences
+                stop_sequences=stop_sequences,
             )
 
             logger.debug(
-                "Generated text with LLM",
-                provider=self.provider_name,
-                result_length=len(result)
+                "Generated text with LLM", provider=self.provider_name, result_length=len(result)
             )
 
             return result
@@ -240,8 +247,8 @@ class LLMService:
                 details={
                     "provider": self.provider_name,
                     "error": str(e),
-                    "prompt_length": len(prompt)
-                }
+                    "prompt_length": len(prompt),
+                },
             ) from e
 
     def generate_json(
@@ -249,7 +256,7 @@ class LLMService:
         prompt: str,
         schema: Dict[str, Any],
         system_prompt: Optional[str] = None,
-        temperature: Optional[float] = None
+        temperature: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Generate structured JSON output from the LLM based on a prompt and schema.
@@ -269,25 +276,25 @@ class LLMService:
                 # Use a lower temperature for structured outputs
                 temperature = min(0.2, self.settings.llm.temperature)
 
+            model = self.settings.llm.get_model_for_task("json")
+
             logger.debug(
                 "Generating JSON with LLM",
                 provider=self.provider_name,
+                model=model,
                 system_prompt_length=len(system_prompt) if system_prompt else 0,
                 prompt_length=len(prompt),
-                temperature=temperature
+                temperature=temperature,
             )
 
             result = self.provider.generate_json(
-                prompt=prompt,
-                schema=schema,
-                system_prompt=system_prompt,
-                temperature=temperature
+                prompt=prompt, schema=schema, system_prompt=system_prompt, temperature=temperature
             )
 
             logger.debug(
                 "Generated JSON with LLM",
                 provider=self.provider_name,
-                result_keys=list(result.keys()) if result else None
+                result_keys=list(result.keys()) if result else None,
             )
 
             return result
@@ -298,6 +305,6 @@ class LLMService:
                 details={
                     "provider": self.provider_name,
                     "error": str(e),
-                    "prompt_length": len(prompt)
-                }
+                    "prompt_length": len(prompt),
+                },
             ) from e

@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from testronaut.interfaces import CLIAnalyzer
 from testronaut.models import Argument, CLITool, Command, Example, Option
 from testronaut.utils.command import CommandRunner
-from testronaut.utils.errors import CommandExecutionError, ValidationError
+from testronaut.utils.errors import CommandExecutionError
 from testronaut.utils.logging import get_logger
 
 # Initialize logger
@@ -159,38 +159,76 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         logger.debug(f"Extracting commands for tool: {tool_name}")
         commands = []
 
-        # Common patterns for commands in help text
-        command_patterns = [
-            # Pattern for "Commands:" section with indented commands
-            r"(?:Commands|Available commands):\s*\n((?:\s+\w+\s+.*\n)+)",
-            # Pattern for "Subcommands:" section
-            r"(?:Subcommands):\s*\n((?:\s+\w+.*\n)+)",
-            # Pattern for command lists with descriptions
-            r"^\s+(\w+)\s+(.*?)$",
-        ]
+        # Look for the "Commands" section in the help text
+        # This pattern works for rich-formatted CLI help (like Typer with rich formatting)
+        commands_section_match = re.search(
+            r"Commands[^\n]*\n(.*?)(?:\n\n|\Z)", help_text, re.DOTALL
+        )
 
-        for pattern in command_patterns:
-            matches = re.findall(pattern, help_text, re.MULTILINE)
-            if matches:
-                if isinstance(matches[0], tuple):
-                    # If matches are tuples, we have command and description
-                    for match in matches:
-                        commands.append(
-                            {
-                                "name": match[0].strip(),
-                                "description": match[1].strip() if len(match) > 1 else None,
-                            }
-                        )
-                else:
-                    # Otherwise, we have a block of text with commands
-                    for block in matches:
-                        for line in block.split("\n"):
-                            if line.strip():
-                                parts = line.strip().split(maxsplit=1)
-                                cmd_name = parts[0].strip()
-                                cmd_desc = parts[1].strip() if len(parts) > 1 else None
-                                commands.append({"name": cmd_name, "description": cmd_desc})
+        if commands_section_match:
+            commands_section = commands_section_match.group(1)
+            # Process each line in the commands section
+            for line in commands_section.split("\n"):
+                # Skip separator lines and empty lines
+                if not line.strip() or re.match(
+                    r"^[\s\u2500\u256d\u256e\u2570\u256f\u2502]+$", line
+                ):
+                    continue
 
+                # Extract command name and description
+                # This works for "command    description" format
+                parts = re.split(r"\s{2,}", line.strip(), maxsplit=1)
+                if len(parts) >= 1:
+                    # Clean up command name (remove UI characters)
+                    cmd_name = parts[0].strip()
+                    cmd_name = re.sub(
+                        r"[\u2500\u256d\u256e\u2570\u256f\u2502]", "", cmd_name
+                    ).strip()
+
+                    # Clean up description
+                    cmd_desc = parts[1].strip() if len(parts) > 1 else None
+                    if cmd_desc:
+                        cmd_desc = re.sub(
+                            r"[\u2500\u256d\u256e\u2570\u256f\u2502]", "", cmd_desc
+                        ).strip()
+
+                    commands.append({"name": cmd_name, "description": cmd_desc})
+
+        # If no commands were found with the above pattern, try simpler patterns
+        if not commands:
+            # Common patterns for commands in help text
+            command_patterns = [
+                # Pattern for "Commands:" section with indented commands
+                r"(?:Commands|Available commands):\s*\n((?:\s+\w+\s+.*\n)+)",
+                # Pattern for "Subcommands:" section
+                r"(?:Subcommands):\s*\n((?:\s+\w+.*\n)+)",
+                # Pattern for command lists with descriptions
+                r"^\s+(\w+)\s+(.*?)$",
+            ]
+
+            for pattern in command_patterns:
+                matches = re.findall(pattern, help_text, re.MULTILINE)
+                if matches:
+                    if isinstance(matches[0], tuple):
+                        # If matches are tuples, we have command and description
+                        for match in matches:
+                            commands.append(
+                                {
+                                    "name": match[0].strip(),
+                                    "description": match[1].strip() if len(match) > 1 else None,
+                                }
+                            )
+                    else:
+                        # Otherwise, we have a block of text with commands
+                        for block in matches:
+                            for line in block.split("\n"):
+                                if line.strip():
+                                    parts = line.strip().split(maxsplit=1)
+                                    cmd_name = parts[0].strip()
+                                    cmd_desc = parts[1].strip() if len(parts) > 1 else None
+                                    commands.append({"name": cmd_name, "description": cmd_desc})
+
+        logger.debug(f"Extracted {len(commands)} commands from help text")
         return commands
 
     def extract_options(self, help_text: str) -> List[Dict[str, Any]]:
@@ -397,7 +435,6 @@ class StandardCLIAnalyzer(CLIAnalyzer):
                     name=arg_data.get("name", ""),
                     description=arg_data.get("description"),
                     required=arg_data.get("required", False),
-                    position=arg_data.get("position", 0),
                 )
                 command.arguments.append(argument)
 
@@ -412,10 +449,9 @@ class StandardCLIAnalyzer(CLIAnalyzer):
                 command.examples.append(example)
 
             return command
-
-        except (CommandExecutionError, ValidationError) as e:
+        except CommandExecutionError as e:
+            # Log error but continue analysis
             logger.error(f"Failed to update command {command.name}: {str(e)}")
-            # Return the command as-is without raising to allow partial processing
             return command
 
     def analyze_cli_tool(self, tool_name: str, version: Optional[str] = None) -> CLITool:
