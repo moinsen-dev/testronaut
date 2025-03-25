@@ -20,7 +20,7 @@ Testronaut relies on the following key technologies:
 - **Rich**: Terminal formatting and visualization
 
 ### Development Tools
-- **uv**: Fast Python package installer and resolver
+- **uv**: Primary Python package manager for the project - chosen for its speed and reliability
 - **pyproject.toml**: Project metadata and dependency specification
 - **pytest**: Testing framework for Python
 - **MkDocs**: Documentation generator

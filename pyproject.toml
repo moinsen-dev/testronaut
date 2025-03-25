@@ -29,6 +29,11 @@ dependencies = [
     "openai>=1.12.0",
     "anthropic>=0.8.0",
     "questionary>=2.1.0",
+    "requests>=2.32.3",
+    "types-requests>=2.32.0.20250306",
+    "huggingface-hub>=0.29.3",
+    "llama-cpp-python>=0.3.8",
+    "pydantic-settings>=2.8.1",
 ]
 
 [project.optional-dependencies]

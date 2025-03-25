@@ -1,18 +1,25 @@
 ---
 description: Rules for working with the Testronaut project
-globs: 
+globs:
 alwaysApply: true
 ---
 
 ## Testronaut Project Rules
 
 ### Project Structure
-- Use uv as python package manager
+- Use uv as the exclusive Python package manager for all package operations (install, update, remove)
 - All Python code follows domain-driven design principles
 - Core business logic is separated from infrastructure concerns
 - Each component has a well-defined responsibility and interface
 - Use dependency injection for flexible component integration
 - Follow the repository pattern for data access
+
+### Package Management
+- Always use uv for package operations: `uv pip install ...`
+- Never use pip directly
+- Use `uv pip install -e ".[dev]"` for development installation
+- Use `uv pip install -e .` for production installation
+- Keep dependencies in `pyproject.toml` up to date
 
 ### Coding Standards
 - Use type hints consistently throughout the codebase
