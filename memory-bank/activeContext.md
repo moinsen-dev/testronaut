@@ -75,9 +75,10 @@ The project is using a domain-driven design approach with clear separation of co
 2. Enhanced CLI analyzer progress reporting with detailed logging
 3. Added fallback to LLM for challenging command structures
 4. Updated documentation to reflect CLI analyzer improvements
-5. Fixed docs workflow to include all required MkDocs plugins (autorefs, mkdocstrings)
-6. Optimized CI/CD workflow to run tests only on Python 3.13 for faster execution
-7. Prepared for test plan generation implementation
+5. Fixed security workflow to correctly configure dependency review action
+6. Fixed docs workflow to include all required MkDocs plugins (autorefs, mkdocstrings)
+7. Optimized CI/CD workflow to run tests only on Python 3.13 for faster execution
+8. Prepared for test plan generation implementation
 
 ## Current Tasks
 1. TestPlan Model

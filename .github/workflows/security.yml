@@ -4,6 +4,14 @@ on:
   schedule:
     - cron: "0 8 * * 1" # Run every Monday at 8:00 UTC
   pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - "pyproject.toml"
+      - "requirements*.txt"
+      - "src/uv.lock"
+  pull_request_target:
     types: [closed]
     branches:
       - main
@@ -16,7 +24,7 @@ on:
 
 jobs:
   analyze:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true)
     name: Security Analysis
     runs-on: ubuntu-latest
     permissions:
@@ -60,9 +68,10 @@ jobs:
           retention-days: 7
 
   dependency-review:
-    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
     name: Dependency Review
     runs-on: ubuntu-latest
+    # Only run on pull request events, not after merge or on schedule/dispatch
+    if: github.event_name == 'pull_request'
     permissions:
       contents: read
       pull-requests: write
@@ -77,7 +86,7 @@ jobs:
           comment-summary-in-pr: true
 
   codeql-analysis:
-    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true)
     name: CodeQL Analysis
     runs-on: ubuntu-latest
     permissions:

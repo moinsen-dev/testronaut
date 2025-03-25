@@ -43,6 +43,7 @@ Phase 002 of the Testronaut project focused on implementing robust CI/CD (Contin
   - Uses Safety to scan for package vulnerabilities
   - Implements Bandit for static security analysis
   - Integrates CodeQL for comprehensive code scanning
+  - Performs dependency review checks on pull requests (not after merge)
   - Reports security issues as GitHub issues
 
 ## Local Testing Tools
