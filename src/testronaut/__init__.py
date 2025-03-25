@@ -5,7 +5,7 @@ Testronaut is a tool for generating, executing, and verifying CLI tool tests
 using containerized environments and AI-assisted validation.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.4.0"
 __author__ = "Testronaut Team"
 
 # Import key components
@@ -18,5 +18,5 @@ __all__ = [
     "update_config",
     "get_config_path",
     "__version__",
-    "__author__"
+    "__author__",
 ]

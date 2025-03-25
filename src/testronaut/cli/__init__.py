@@ -7,6 +7,7 @@ This module defines the CLI commands and options for the Testronaut application.
 """
 
 import json
+import logging
 import os
 import sys
 from datetime import datetime
@@ -20,11 +21,13 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
+from sqlalchemy import func, select, text
+from sqlmodel import Session, SQLModel
 
 from testronaut import __version__
 from testronaut.config import Settings, get_config_path, initialize_config, update_config
 from testronaut.factory import registry
-from testronaut.models.base import create_db_and_tables
+from testronaut.models.base import DATABASE_URL, create_db_and_tables, engine
 from testronaut.repositories.cli_tool import CLIToolRepository
 from testronaut.utils.errors import CommandExecutionError, ValidationError
 from testronaut.utils.llm import LLMService
@@ -47,12 +50,14 @@ config_app = typer.Typer(help="Configuration management commands")
 analyze_app = typer.Typer(help="Analyze CLI tools and generate test plans")
 execute_app = typer.Typer(help="Execute tests from test plans")
 verify_app = typer.Typer(help="Verify test results")
+db_app = typer.Typer(help="Database management commands")
 
 # Add sub-commands to main app
 app.add_typer(config_app, name="config")
 app.add_typer(analyze_app, name="analyze")
 app.add_typer(execute_app, name="execute")
 app.add_typer(verify_app, name="verify")
+app.add_typer(db_app, name="db")
 
 
 def version_callback(value: bool):
@@ -487,67 +492,210 @@ def test_llm():
 def get_analyzed_tool(
     tool_name: str = typer.Argument(..., help="Name of the CLI tool to retrieve"),
 ):
-    """Retrieve a specific CLI tool from the database and display its details."""
+    """
+    Retrieve a specific CLI tool from the database and display details.
+    """
     try:
-        # Initialize database
         create_db_and_tables()
 
-        # Create console for output
         console = Console()
-
-        # Create repository and get tool
         repo = CLIToolRepository()
+
+        # Use get_by_name which already handles eager loading of relationships
         tool = repo.get_by_name(tool_name)
 
         if not tool:
-            console.print(f"[yellow]Tool '{tool_name}' not found in the database.[/yellow]")
-            return 1
+            console.print(f"[red]CLI Tool '{tool_name}' not found in the database.[/red]")
+            raise typer.Exit(1)
 
+        # Print tool information
         console.print(f"[bold green]CLI Tool:[/bold green] {tool.name}")
-        console.print(f"[bold green]Version:[/bold green] {tool.version}")
-        console.print(f"[bold green]Analyzed At:[/bold green] {tool.created_at}")
-        console.print(f"[bold green]Total Commands:[/bold green] {len(tool.commands)}")
-        console.print()
+        if tool.version:
+            console.print(f"[bold]Version:[/bold] {tool.version}")
+        console.print(f"[bold]Analyzed At:[/bold] {tool.created_at}")
+        console.print(f"[bold]Total Commands:[/bold] {len(tool.commands)}")
 
-        # Build a rich tree to display the commands
-        root = Tree(f"[bold blue]{tool.name}[/bold blue]")
+        # Create tree for commands
+        root = Tree(f"[bold]{tool.name}[/bold] Commands")
 
-        # Function to recursively add commands to the tree
-        def add_commands_to_tree(commands, parent_node):
+        # Build tree of commands
+        def add_commands_to_tree(commands, parent):
             for cmd in commands:
-                # Create a node for the command
-                cmd_node = parent_node.add(
-                    f"[bold cyan]{cmd.name}[/bold cyan]: {cmd.description or ''}"
+                # Create command node
+                cmd_node = parent.add(
+                    f"[cyan]{cmd.name}[/cyan]" + (f": {cmd.description}" if cmd.description else "")
                 )
 
-                # Add options if any
+                # Add options
                 if cmd.options:
-                    options_node = cmd_node.add("[bold yellow]Options:[/bold yellow]")
+                    opt_node = cmd_node.add("[yellow]Options[/yellow]")
                     for opt in cmd.options:
-                        options_node.add(f"{opt.name}: {opt.description or ''}")
+                        name = opt.name
+                        if opt.short_form:
+                            name = f"{opt.short_form}, {name}"
+                        opt_node.add(
+                            f"[yellow]{name}[/yellow]"
+                            + (f": {opt.description}" if opt.description else "")
+                        )
 
-                # Add arguments if any
+                # Add arguments
                 if cmd.arguments:
-                    args_node = cmd_node.add("[bold magenta]Arguments:[/bold magenta]")
+                    arg_node = cmd_node.add("[green]Arguments[/green]")
                     for arg in cmd.arguments:
-                        args_node.add(f"{arg.name}: {arg.description or ''}")
+                        arg_node.add(
+                            f"[green]{arg.name}[/green]"
+                            + (f": {arg.description}" if arg.description else "")
+                        )
 
                 # Recursively add subcommands
                 if cmd.subcommands:
                     add_commands_to_tree(cmd.subcommands, cmd_node)
 
-        # Add top-level commands to the tree
+        # Build the command tree
         add_commands_to_tree(tool.commands, root)
 
-        # Display the tree
+        # Print the command tree
         console.print(root)
 
-        return 0
     except Exception as e:
         console = Console()
-        console.print(f"[bold red]Error retrieving tool:[/bold red] {str(e)}")
+        console.print(f"[red]Error retrieving tool:[/red] {str(e)}")
         logger.exception(f"Error retrieving tool: {str(e)}")
-        return 1
+        raise typer.Exit(1)
+
+
+@analyze_app.command()
+def browser(
+    tool_name: Optional[str] = typer.Option(
+        None, "--tool", "-t", help="Load a specific tool by name"
+    ),
+    quiet: bool = typer.Option(True, "--quiet/--no-quiet", "-q", help="Silence all logging output"),
+    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug logging"),
+) -> None:
+    """
+    Launch an interactive database browser for exploring analyzed CLI tools.
+    """
+    from rich.console import Console
+
+    console = Console()
+
+    try:
+        # Configure logging based on the quiet and debug flags
+        if debug:
+            console.print("Debug mode enabled. Some log messages will be shown.")
+            # Only adjust root logger if debug is enabled
+            logging.getLogger().setLevel(logging.INFO)
+            # Always set SQLAlchemy to WARNING to avoid overwhelming output
+            logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+            # Set testronaut logger to DEBUG for detailed info
+            testronaut_logger = logging.getLogger("testronaut")
+            testronaut_logger.setLevel(logging.DEBUG)
+            # Specifically set the UI logger to DEBUG
+            ui_logger = logging.getLogger("testronaut.ui")
+            ui_logger.setLevel(logging.DEBUG)
+            # Add a console handler for direct output during debugging
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(
+                logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            )
+            ui_logger.addHandler(console_handler)
+            ui_logger.debug("UI Debug logging enabled")
+        elif quiet:
+            # In quiet mode, suppress all logging
+            logging.getLogger().setLevel(logging.ERROR)
+            logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
+            logging.getLogger("testronaut").setLevel(logging.ERROR)
+
+        # Initialize database
+        create_db_and_tables()
+
+        tool_id = None
+        if tool_name:
+            # If a tool name was provided, find its ID
+            repo = CLIToolRepository()
+            tool = repo.get_by_name(tool_name)
+            if tool:
+                tool_id = str(tool.id)
+                console.print(f"Loading tool: [bold]{tool_name}[/bold]")
+            else:
+                console.print(
+                    f"[yellow]Warning:[/yellow] Tool '{tool_name}' not found in database."
+                )
+
+        # Import here to avoid circular imports
+        from testronaut.ui.browser import run_browser
+
+        # Run the browser (this will take over the terminal)
+        run_browser(tool_id)
+
+    except Exception as e:
+        console.print(f"[red]Error launching browser: {str(e)}[/red]")
+        if debug:
+            console.print_exception()
+        raise typer.Exit(1)
+
+
+@db_app.command("reset")
+def db_reset(
+    force: bool = typer.Option(False, "--force", "-f", help="Force reset without confirmation"),
+) -> None:
+    """Reset the database by dropping and recreating all tables."""
+    if not force:
+        confirm = typer.confirm("This will delete all data in the database. Are you sure?")
+        if not confirm:
+            console.print("[yellow]Database reset cancelled.[/yellow]")
+            return
+
+    try:
+        # Drop all tables
+        SQLModel.metadata.drop_all(engine)
+        console.print("[green]Successfully dropped all tables.[/green]")
+
+        # Recreate tables
+        create_db_and_tables()
+        console.print("[green]Successfully recreated all tables.[/green]")
+
+        console.print("[bold green]Database reset complete![/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]Error resetting database:[/bold red] {str(e)}")
+        logger.exception("Failed to reset database")
+        raise typer.Exit(1)
+
+
+@db_app.command("info")
+def db_info() -> None:
+    """Display information about the database."""
+    try:
+        with Session(engine) as session:
+            # Get table information
+            tables = SQLModel.metadata.tables
+            console.print("\n[bold]Database Tables:[/bold]")
+
+            table = Table(show_header=True, header_style="bold magenta")
+            table.add_column("Table Name")
+            table.add_column("Row Count")
+
+            for table_name in tables:
+                # Get row count for each table using text
+                result = session.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+                count = result if result is not None else 0
+                table.add_row(str(table_name), str(count))
+
+            console.print(table)
+
+            # Show database file location
+            db_path = DATABASE_URL.replace("sqlite:///", "")
+            console.print(f"\n[bold]Database Location:[/bold] {db_path}")
+
+            # Show database size
+            if os.path.exists(db_path):
+                size = os.path.getsize(db_path)
+                console.print(f"[bold]Database Size:[/bold] {size / 1024:.2f} KB")
+
+    except Exception as e:
+        console.print(f"[bold red]Error getting database info:[/bold red] {str(e)}")
+        logger.exception("Failed to get database info")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

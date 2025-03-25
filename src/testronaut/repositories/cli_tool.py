@@ -25,6 +25,44 @@ class CLIToolRepository(Repository[CLITool]):
         """Initialize the repository with the CLITool model class."""
         super().__init__(CLITool)
 
+    def get_tool_by_id(self, tool_id: int) -> Optional[CLITool]:
+        """
+        Get a CLI tool by its ID with all relationships eagerly loaded.
+
+        Args:
+            tool_id: The ID of the CLI tool
+
+        Returns:
+            The CLI tool or None if not found
+        """
+        with Session(engine) as session:
+            # First get the basic tool to check if it exists
+            statement = select(CLITool).where(CLITool.id == tool_id)
+            tool = session.exec(statement).first()
+
+            if not tool:
+                return None
+
+            # Get the tool with all relationships within the session context
+            tool_with_relations = session.get(CLITool, tool.id)
+
+            if tool_with_relations:
+                # Trigger loading of relationships
+                commands = (
+                    list(tool_with_relations.commands)
+                    if hasattr(tool_with_relations, "commands")
+                    else []
+                )
+
+                # Trigger loading of nested relationships
+                for cmd in commands:
+                    _ = list(cmd.options) if hasattr(cmd, "options") else []
+                    _ = list(cmd.arguments) if hasattr(cmd, "arguments") else []
+                    _ = list(cmd.examples) if hasattr(cmd, "examples") else []
+                    _ = list(cmd.subcommands) if hasattr(cmd, "subcommands") else []
+
+            return tool_with_relations
+
     def get_by_name(self, name: str) -> Optional[CLITool]:
         """
         Get a CLI tool by its name with all relationships eagerly loaded.
@@ -127,6 +165,21 @@ class CLIToolRepository(Repository[CLITool]):
                     tools.append(loaded_tool)
 
         return tools
+
+    def get_commands_for_tool(self, tool_id: int) -> List[Command]:
+        """
+        Get all commands for a specific CLI tool.
+
+        Args:
+            tool_id: The ID of the CLI tool
+
+        Returns:
+            List of commands for the tool
+        """
+        with Session(engine) as session:
+            statement = select(Command).where(Command.cli_tool_id == tool_id)
+            commands = session.exec(statement).all()
+            return list(commands)
 
 
 class CommandRepository(Repository[Command]):

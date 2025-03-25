@@ -97,7 +97,7 @@ def print_banner():
     """Print application banner."""
     banner = """
     [bold blue]Testronaut[/bold blue] - [italic]AI-assisted end-to-end CLI testing tool[/italic]
-    Version 0.1.0
+    Version 0.4.0
     Created by Ulrich Diedrichsen (uli@moinsen.dev)
     """
     rprint(banner)

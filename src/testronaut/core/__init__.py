@@ -7,4 +7,4 @@ This package contains the core business logic and domain models
 for the Testronaut application, separated from infrastructure concerns.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.4.0"
