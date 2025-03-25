@@ -42,6 +42,7 @@ class OpenAIProvider:
         self.organization = None
         self.model = "gpt-3.5-turbo"
         self.base_url = None
+        self.last_token_usage = None
 
     def initialize(self, settings: Dict[str, Any]) -> None:
         """
@@ -156,6 +157,20 @@ class OpenAIProvider:
 
             response = self.client.chat.completions.create(**params)
 
+            # Track token usage
+            self.last_token_usage = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens,
+                "model": self.model
+            }
+
+            logger.debug(
+                f"OpenAI token usage: {self.last_token_usage['total_tokens']} tokens "
+                f"({self.last_token_usage['prompt_tokens']} prompt, "
+                f"{self.last_token_usage['completion_tokens']} completion)"
+            )
+
             # Extract the generated text
             if not response.choices:
                 raise LLMServiceError(
@@ -266,54 +281,90 @@ class OpenAIProvider:
         temperature: float = 0.2,
     ) -> Dict[str, Any]:
         """
-        Generate structured JSON using OpenAI's native JSON mode.
+        Generate JSON using the OpenAI native JSON mode.
 
         Args:
             prompt: The user prompt.
-            schema: JSON schema.
-            system_prompt: System prompt.
-            temperature: Temperature setting.
+            schema: The JSON schema to validate against.
+            system_prompt: Optional system prompt.
+            temperature: The temperature to use.
 
         Returns:
-            Generated JSON object.
+            The generated JSON object.
         """
-        # Create the system message with schema information
-        base_system_prompt = system_prompt or "You are a helpful assistant that outputs JSON."
-
-        # Add schema details to the system prompt
-        formatted_schema = json.dumps(schema, indent=2)
-        full_system_prompt = (
-            f"{base_system_prompt}\n\n"
-            f"You must respond with valid JSON that follows this schema:\n```json\n{formatted_schema}\n```\n"
-            f"Do not include any explanations, only provide a valid JSON response."
-        )
-
-        # Prepare messages
-        messages = [
-            {"role": "system", "content": full_system_prompt},
-            {"role": "user", "content": prompt},
-        ]
-
-        # Make the API call with response_format=json
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-            response_format={"type": "json_object"},
-        )
-
-        # Extract and parse the JSON response
-        content = response.choices[0].message.content
-        if not content:
-            raise LLMServiceError("OpenAI returned empty content", details={"model": self.model})
+        if not self.client:
+            raise LLMServiceError(
+                "OpenAI client not initialized",
+                details={"solution": "Call initialize() before generating JSON"},
+            )
 
         try:
-            return json.loads(content)
-        except json.JSONDecodeError as e:
-            raise LLMServiceError(
-                "Failed to parse JSON response from OpenAI",
-                details={"error": str(e), "content": content},
-            ) from e
+            # Prepare messages
+            messages = []
+
+            # Add system message if provided
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            else:
+                # Default system message for JSON generation
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that outputs valid JSON according to the provided schema.",
+                    }
+                )
+
+            # Add user message with the schema
+            schema_json = json.dumps(schema, indent=2)
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"{prompt}\n\n"
+                        f"Return your response as a JSON object that conforms to this schema:\n"
+                        f"```json\n{schema_json}\n```"
+                    ),
+                }
+            )
+
+            # Generate completion with JSON mode
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                response_format={"type": "json_object"},
+            )
+
+            # Track token usage
+            self.last_token_usage = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens,
+                "model": self.model
+            }
+
+            logger.debug(
+                f"OpenAI token usage: {self.last_token_usage['total_tokens']} tokens "
+                f"({self.last_token_usage['prompt_tokens']} prompt, "
+                f"{self.last_token_usage['completion_tokens']} completion)"
+            )
+
+            # Extract the generated text
+            if not response.choices:
+                raise LLMServiceError(
+                    "OpenAI returned no choices", details={"response": str(response)}
+                )
+
+            content = response.choices[0].message.content or ""
+
+            # Parse the JSON
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError as e:
+                raise LLMServiceError(
+                    "OpenAI returned invalid JSON",
+                    details={"error": str(e), "content": content},
+                )
 
     def _generate_json_with_instructions(
         self,
@@ -323,83 +374,86 @@ class OpenAIProvider:
         temperature: float = 0.2,
     ) -> Dict[str, Any]:
         """
-        Generate structured JSON using system prompt instructions.
+        Generate JSON using instructions when native JSON mode is not available.
 
         Args:
             prompt: The user prompt.
-            schema: JSON schema.
-            system_prompt: System prompt.
-            temperature: Temperature setting.
+            schema: The JSON schema to validate against.
+            system_prompt: Optional system prompt.
+            temperature: The temperature to use.
 
         Returns:
-            Generated JSON object.
+            The generated JSON object.
         """
-        # Create the system message with schema information
-        base_system_prompt = system_prompt or "You are a helpful assistant that outputs JSON."
-
-        # Add schema details to the system prompt
-        formatted_schema = json.dumps(schema, indent=2)
-        full_system_prompt = (
-            f"{base_system_prompt}\n\n"
-            f"You must respond with valid JSON that follows this schema:\n```json\n{formatted_schema}\n```\n"
-            f"Do not include any explanations, only provide a valid JSON response that can be parsed by json.loads()."
-        )
-
-        # Generate the text that should contain JSON
-        response_text = self.generate_text(
-            prompt=prompt, system_prompt=full_system_prompt, temperature=temperature
-        )
-
-        # Clean the response to extract just the JSON part
-        cleaned_response = self._extract_json_from_text(response_text)
+        if not self.client:
+            raise LLMServiceError(
+                "OpenAI client not initialized",
+                details={"solution": "Call initialize() before generating JSON"},
+            )
 
         try:
-            return json.loads(cleaned_response)
-        except json.JSONDecodeError as e:
-            # Log the error and response for debugging
-            logger.error(
-                "Failed to parse JSON response",
-                error=str(e),
-                response=response_text,
-                cleaned_response=cleaned_response,
+            # Prepare messages
+            messages = []
+
+            # Add system message if provided
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            else:
+                # Default system message for JSON generation
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a helpful assistant that outputs valid JSON according to the provided schema. "
+                            "Respond ONLY with the JSON object and no additional text, explanations, or markdown formatting."
+                        ),
+                    }
+                )
+
+            # Add user message with the schema
+            schema_json = json.dumps(schema, indent=2)
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"{prompt}\n\n"
+                        f"Return your response as a JSON object that conforms to this schema:\n"
+                        f"```json\n{schema_json}\n```\n\n"
+                        f"Important: Respond ONLY with the JSON object and no other text. "
+                        f"Do not include markdown formatting or code blocks in your response."
+                    ),
+                }
             )
 
-            # Make a second attempt with more explicit instructions
-            retry_system_prompt = (
-                "You must respond with ONLY valid JSON. No markdown formatting, no explanations, "
-                "no code blocks. Just the raw, parseable JSON object. Your entire response should "
-                "be valid JSON that can be parsed with json.loads()."
+            # Generate completion
+            response = self.client.chat.completions.create(
+                model=self.model, messages=messages, temperature=temperature
             )
 
-            retry_prompt = (
-                f"Generate JSON that matches this schema: {formatted_schema}\n\n"
-                f"For this request: {prompt}\n\n"
-                f"Respond with ONLY the JSON object, nothing else."
+            # Track token usage
+            self.last_token_usage = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens,
+                "model": self.model
+            }
+
+            logger.debug(
+                f"OpenAI token usage: {self.last_token_usage['total_tokens']} tokens "
+                f"({self.last_token_usage['prompt_tokens']} prompt, "
+                f"{self.last_token_usage['completion_tokens']} completion)"
             )
 
-            retry_response = self.generate_text(
-                prompt=retry_prompt,
-                system_prompt=retry_system_prompt,
-                temperature=min(
-                    temperature, 0.1
-                ),  # Lower temperature for more deterministic output
-            )
-
-            # Clean up and retry parsing
-            cleaned_retry = self._extract_json_from_text(retry_response)
-
-            try:
-                return json.loads(cleaned_retry)
-            except json.JSONDecodeError as e2:
+            # Extract the generated text
+            if not response.choices:
                 raise LLMServiceError(
-                    "Failed to parse JSON response after retry",
-                    details={
-                        "error": str(e2),
-                        "original_response": response_text,
-                        "retry_response": retry_response,
-                        "cleaned_retry": cleaned_retry,
-                    },
-                ) from e2
+                    "OpenAI returned no choices", details={"response": str(response)}
+                )
+
+            content = response.choices[0].message.content or ""
+
+            # Try to extract JSON from the text
+            return self._extract_json_from_text(content)
 
     def _extract_json_from_text(self, text: str) -> str:
         """

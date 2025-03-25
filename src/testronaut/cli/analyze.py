@@ -3,17 +3,16 @@ CLI command for analyzing tools.
 """
 
 import json
+import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
-from rich import print as rprint
+import questionary
+import typer
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+from rich.spinner import Spinner
 
-from testronaut.analyzers.llm_enhanced_analyzer import LLMEnhancedAnalyzer
-from testronaut.analyzers.standard_analyzer import StandardCLIAnalyzer
-from testronaut.utils.command import CommandRunner
 from testronaut.utils.logging import configure_logging, get_logger
 
 # Initialize logger
@@ -22,371 +21,229 @@ console = Console()
 
 
 def analyze_tool(
+    ctx: typer.Context,
     tool_path: str,
     output: Optional[Path] = None,
     deep: bool = False,
-    enhanced: bool = True,  # Default to enhanced analysis
+    enhanced: bool = False,
     verbose: bool = False,
-    sql_debug: bool = False,  # Add SQL debug option
-    interactive: bool = False,  # Interactive mode for selecting commands
-    max_commands: Optional[int] = None,  # Maximum commands to analyze
+    sql_debug: bool = False,
+    interactive: bool = False,
+    max_commands: Optional[int] = None,
 ) -> None:
     """
-    Analyze a CLI tool.
+    Analyze a CLI tool and generate a report of its commands, options, and arguments.
 
     Args:
-        tool_path: Path to the CLI tool executable.
-        output: Directory to save analysis results.
-        deep: Whether to perform a deeper analysis.
-        enhanced: Whether to use the LLM-enhanced analyzer.
-        verbose: Whether to show verbose logging.
-        sql_debug: Whether to enable detailed SQL query logging.
-        interactive: Whether to use interactive mode for selecting commands.
+        ctx: Typer context.
+        tool_path: Path to the CLI tool to analyze.
+        output: Directory to output the analysis as JSON files.
+        deep: Whether to perform a deep analysis of options and arguments.
+        enhanced: Whether to use LLM-enhanced analysis for better descriptions.
+        verbose: Whether to print verbose output.
+        sql_debug: Whether to log SQL queries.
+        interactive: Whether to run in interactive mode to select commands for analysis.
         max_commands: Maximum number of commands to analyze.
     """
-    # Configure logging based on verbosity
-    if verbose:
-        configure_logging(level="DEBUG")
-        logger.debug("Verbose logging enabled")
+    # Configure logging
+    configure_logging(verbose=verbose, sql_debug=sql_debug)
 
-    # Configure SQL debugging if requested
-    if sql_debug:
-        from testronaut.models.base import configure_sql_logging
+    # Notify user about what's happening
+    tool_name = os.path.basename(tool_path)
+    logger.info(f"Analyzing tool: {tool_name}")
 
-        configure_sql_logging(debug=True)
-        logger.debug("SQL debugging enabled")
+    # Create progress spinner
+    spinner = Spinner()
 
     try:
-        # Show status in console
-        rprint(f"[bold blue]Analyzing {tool_path}...[/bold blue]")
+        # Start analysis
+        with spinner(f"Analyzing {tool_name}..."):
+            # Get the appropriate analyzer
+            analyzer = get_analyzer(enhanced)
+            logger.info(f"Using {analyzer.__class__.__name__.lower()} for analysis")
 
-        # Create output directory if specified
-        output_file = None
-        semantic_dir = None
-        purpose_dir = None
-        if output:
-            output.mkdir(parents=True, exist_ok=True)
-            output_file = output / f"{Path(tool_path).name}_analysis.json"
-            semantic_dir = output / "semantic"
-            semantic_dir.mkdir(exist_ok=True)
-            purpose_dir = output / "purpose"
-            purpose_dir.mkdir(exist_ok=True)
+            # Extract main and subcommand information
+            if interactive:
+                # For interactive mode, extract commands first without full analysis
+                spinner.text = f"Discovering commands for {tool_name}..."
+                cli_tool = analyzer.standard_analyzer.analyze_cli_tool(
+                    tool_path, max_commands=max_commands or 100
+                )
 
-        # Initialize the appropriate analyzer
-        command_runner = CommandRunner()
-        # Use Union type to allow both analyzer types
-        analyzer: Union[LLMEnhancedAnalyzer, StandardCLIAnalyzer]
+                # Stop spinner temporarily
+                spinner.stop()
 
-        if enhanced:
-            rprint("[cyan]Using llm_enhanced analyzer for analysis[/cyan]")
-            analyzer = LLMEnhancedAnalyzer(command_runner=command_runner)
-        else:
-            rprint("[cyan]Using standard analyzer for analysis[/cyan]")
-            analyzer = StandardCLIAnalyzer(command_runner=command_runner)
-
-        # Handle interactive mode
-        selected_commands = None
-        if interactive:
-            try:
-                import questionary
-                from rich.prompt import Confirm
-
-                rprint("[cyan]Starting interactive command discovery mode...[/cyan]")
-
-                # First, get the tool's help text to extract top-level commands
-                help_text = analyzer.get_tool_help_text(tool_path)
-
-                # Extract top-level commands - check if StandardCLIAnalyzer
-                if isinstance(analyzer, StandardCLIAnalyzer) and hasattr(
-                    analyzer, "extract_commands"
-                ):
-                    main_commands = analyzer.extract_commands(tool_path, help_text)
-                elif isinstance(analyzer, LLMEnhancedAnalyzer) and hasattr(
-                    analyzer, "standard_analyzer"
-                ):
-                    # Use standard_analyzer for LLMEnhancedAnalyzer
-                    main_commands = analyzer.standard_analyzer.extract_commands(
-                        tool_path, help_text
-                    )
-                else:
-                    # Fallback if extract_commands isn't available
-                    rprint(
-                        "[yellow]Cannot extract commands in interactive mode with this analyzer[/yellow]"
-                    )
-                    main_commands = []
-
-                if not main_commands:
-                    rprint("[red]No commands found for this tool.[/red]")
+                # Display commands to the user
+                command_choices = [cmd.name for cmd in cli_tool.commands if not cmd.is_subcommand]
+                if not command_choices:
+                    console.print("[red]No commands found for this tool.[/red]")
                     return
 
-                # Display the discovered commands for selection
-                rprint(
-                    f"\n[green]Discovered {len(main_commands)} main commands for {tool_path}:[/green]"
-                )
-
-                # Create list of command choices with descriptions
-                choices = []
-                for cmd in main_commands:
-                    name = cmd.get("name", "")
-                    desc = cmd.get("description", "No description")
-                    if name:
-                        display_text = f"{name} - {desc}"
-                        choices.append(questionary.Choice(value=name, text=display_text))
-
-                # Let user select which commands to analyze
-                rprint(
-                    "\n[cyan]Select commands to analyze (space to select, enter to confirm):[/cyan]"
-                )
+                # Use questionary to select commands
                 selected_commands = questionary.checkbox(
-                    "",
-                    choices=choices,
-                    validate=lambda selected: True
-                    if selected
-                    else "Please select at least one command",
+                    "Select commands to analyze:", choices=command_choices
                 ).ask()
 
                 if not selected_commands:
-                    rprint("[yellow]No commands selected. Exiting.[/yellow]")
+                    console.print("[yellow]No commands selected, exiting.[/yellow]")
                     return
 
-                # Ask if user wants to analyze subcommands
-                analyze_subcommands = Confirm.ask(
-                    "[cyan]Do you want to analyze subcommands of the selected commands?[/cyan]"
-                )
+                # Ask for discovery parameters
+                discovery_depth = questionary.select(
+                    "Select subcommand discovery depth:",
+                    choices=["1 (shallow)", "3 (moderate)", "5 (deep)", "10 (very deep)"],
+                    default="3 (moderate)",
+                ).ask()
+                depth = int(discovery_depth.split()[0])
 
-                if analyze_subcommands:
-                    max_depth = questionary.text(
-                        "Maximum depth for subcommand discovery (1-10):",
-                        default="3",
-                        validate=lambda text: text.isdigit() and 1 <= int(text) <= 10,
-                    ).ask()
-                    max_depth = int(max_depth)
+                # Ask for max_commands limit
+                max_commands_str = questionary.select(
+                    "Select maximum number of commands to analyze:",
+                    choices=[
+                        "10 (minimal)",
+                        "50 (basic)",
+                        "100 (moderate)",
+                        "200 (comprehensive)",
+                        "No limit",
+                    ],
+                    default="50 (basic)",
+                ).ask()
+                if max_commands_str != "No limit":
+                    max_commands = int(max_commands_str.split()[0])
+
+                # Restart spinner
+                spinner.start("Running CLI analysis...")
+
+                # Create a new analyzer to run with selected commands
+                if enhanced:
+                    # Filter commands to just the selected ones
+                    filtered_commands = [
+                        cmd for cmd in cli_tool.commands if cmd.name in selected_commands
+                    ]
+                    cli_tool.commands = filtered_commands
+
+                    # Restore original command extraction if it was modified
+                    cli_tool = analyzer.analyze_cli_tool(tool_path, max_commands=max_commands)
                 else:
-                    max_depth = 1  # Only top-level commands
-
-                # Get maximum commands to discover if not specified
-                if not max_commands:
-                    max_commands_input = questionary.text(
-                        "Maximum number of commands to analyze:",
-                        default="30",
-                        validate=lambda text: text.isdigit() and int(text) > 0,
-                    ).ask()
-                    max_commands = int(max_commands_input)
-
-                rprint(
-                    f"\n[green]Analyzing {len(selected_commands)} command(s) with max depth {max_depth} and max commands {max_commands}[/green]"
-                )
-
-                # Create a filtered analyzer that only processes selected commands
-                # Handle both analyzer types differently
-                if isinstance(analyzer, StandardCLIAnalyzer) and hasattr(
-                    analyzer, "extract_commands"
-                ):
-                    original_extract_commands = analyzer.extract_commands
-
-                    def filtered_extract_commands(
-                        tool_name: str, help_text: str
-                    ) -> List[Dict[str, Any]]:
-                        commands = original_extract_commands(tool_name, help_text)
-                        if tool_name == tool_path:  # Only filter at the top level
-                            return [cmd for cmd in commands if cmd.get("name") in selected_commands]
-                        return commands
-
-                    # Apply the filter function temporarily
-                    analyzer.extract_commands = filtered_extract_commands  # type: ignore
-                elif isinstance(analyzer, LLMEnhancedAnalyzer) and hasattr(
-                    analyzer, "standard_analyzer"
-                ):
-                    # For LLMEnhancedAnalyzer, work with its standard_analyzer
-                    original_extract_commands = analyzer.standard_analyzer.extract_commands
-
-                    def filtered_extract_commands(
-                        tool_name: str, help_text: str
-                    ) -> List[Dict[str, Any]]:
-                        commands = original_extract_commands(tool_name, help_text)
-                        if tool_name == tool_path:  # Only filter at the top level
-                            return [cmd for cmd in commands if cmd.get("name") in selected_commands]
-                        return commands
-
-                    # Apply the filter function to the standard_analyzer
-                    analyzer.standard_analyzer.extract_commands = filtered_extract_commands  # type: ignore
-
-            except ImportError:
-                rprint(
-                    "[yellow]Interactive mode requires 'questionary' package. Falling back to standard analysis.[/yellow]"
-                )
-                interactive = False
-
-        # Create a spinner to show progress
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold blue]{task.description}[/bold blue]"),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
-            # Start a task
-            task_description = "Running CLI analysis..."
-            if interactive and selected_commands:
-                task_description = f"Analyzing {len(selected_commands)} command(s)..."
-            task = progress.add_task(task_description, total=None)
-
-            # Update progress description based on analyzer type
-            if enhanced:
-                progress.update(task, description="Running LLM-enhanced analysis...")
+                    # For standard analyzer, just run with the selected settings
+                    cli_tool = analyzer.analyze_cli_tool(
+                        tool_path, max_depth=depth, max_commands=max_commands
+                    )
             else:
-                progress.update(task, description="Running standard analysis...")
+                # Regular non-interactive analysis
+                spinner.text = "Running CLI analysis..."
+                cli_tool = analyzer.analyze_cli_tool(tool_path, max_commands=max_commands)
 
-            # Analyze the tool
-            cli_tool = analyzer.analyze_cli_tool(tool_path, max_commands=max_commands)
+        # Process results
+        if output:
+            # Ensure output directory exists
+            output.mkdir(exist_ok=True, parents=True)
 
-            # Restore original extract_commands if we modified it
-            if interactive and selected_commands:
-                if isinstance(analyzer, StandardCLIAnalyzer) and hasattr(
-                    analyzer, "extract_commands"
-                ):
-                    analyzer.extract_commands = original_extract_commands  # type: ignore
-                elif isinstance(analyzer, LLMEnhancedAnalyzer) and hasattr(
-                    analyzer, "standard_analyzer"
-                ):
-                    analyzer.standard_analyzer.extract_commands = original_extract_commands  # type: ignore
+            # Generate output file path
+            output_file = output / f"{tool_name}_analysis.json"
 
-            # Export results if output directory specified
-            if output and output_file:
-                progress.update(task, description="Exporting analysis results...")
-                # Export to JSON
-                export_to_json(cli_tool, output_file)
+            # Export to JSON - handling fields that may cause Pydantic serialization warnings
+            # Ensure string fields are actually strings
+            if hasattr(cli_tool, "purpose") and isinstance(cli_tool.purpose, list):
+                cli_tool.purpose = " ".join(cli_tool.purpose)
 
-                # Export semantic analysis if enhanced
-                if enhanced and hasattr(cli_tool, "metadata"):
-                    metadata_dict = {}
-                    metadata = getattr(cli_tool, "metadata", None)
+            if hasattr(cli_tool, "background") and isinstance(cli_tool.background, list):
+                cli_tool.background = " ".join(cli_tool.background)
 
-                    # Handle metadata as a dict-like object or convert to dict if needed
-                    if hasattr(metadata, "get") and callable(metadata.get):
-                        # If it's dict-like, use get method
-                        semantic_analysis = metadata.get("semantic_analysis", {})
-                    elif hasattr(metadata, "__dict__"):
-                        # If it has __dict__, convert to dict
-                        metadata_dict = vars(metadata)
-                        semantic_analysis = metadata_dict.get("semantic_analysis", {})
-                    else:
-                        # Default to empty dict
-                        semantic_analysis = {}
+            # Clean up any fields that might cause serialization issues for each command
+            if hasattr(cli_tool, "commands"):
+                for cmd in cli_tool.commands:
+                    if hasattr(cmd, "purpose") and isinstance(cmd.purpose, list):
+                        cmd.purpose = " ".join(cmd.purpose)
 
-                    if semantic_analysis and semantic_dir:
-                        for command in cli_tool.commands:
-                            # Check if command has the attributes we need
-                            if hasattr(command, "id") and hasattr(command, "name"):
-                                cmd_id = command.id  # type: ignore
-                                if cmd_id in semantic_analysis:
-                                    semantic_file = semantic_dir / f"{command.name}.json"  # type: ignore
-                                    export_dict_to_json(
-                                        semantic_analysis[cmd_id],
-                                        semantic_file,
-                                    )
+                    # Ensure examples are properly formatted
+                    if hasattr(cmd, "examples"):
+                        for i, example in enumerate(cmd.examples):
+                            if isinstance(example, str):
+                                # Convert string examples to proper Example objects
+                                cmd.examples[i] = {"command_line": example, "description": ""}
 
-                # Export purpose information
-                if enhanced and purpose_dir:
-                    # Parse JSON fields if needed
-                    use_cases = []
-                    if hasattr(cli_tool, "use_cases") and cli_tool.use_cases:
-                        try:
-                            if isinstance(cli_tool.use_cases, str):
-                                use_cases = json.loads(cli_tool.use_cases)
-                            else:
-                                use_cases = cli_tool.use_cases
-                        except:
-                            pass
+            # Export to JSON
+            try:
+                with open(output_file, "w") as f:
+                    # Handle conversion for JSONEncoder
+                    cli_tool_dict = cli_tool.model_dump()
+                    json.dump(cli_tool_dict, f, indent=2, cls=CLIToolJSONEncoder)
+                logger.info(f"Exported analysis to {output_file}")
+            except Exception as e:
+                logger.error(f"Failed to export analysis: {str(e)}")
 
-                    testing_considerations = []
-                    if (
-                        hasattr(cli_tool, "testing_considerations")
-                        and cli_tool.testing_considerations
-                    ):
-                        try:
-                            if isinstance(cli_tool.testing_considerations, str):
-                                testing_considerations = json.loads(cli_tool.testing_considerations)
-                            else:
-                                testing_considerations = cli_tool.testing_considerations
-                        except:
-                            pass
+        # Display token usage if available from LLM-enhanced analysis
+        if enhanced and hasattr(cli_tool, "metadata") and "llm_usage" in cli_tool.metadata:
+            usage = cli_tool.metadata["llm_usage"]
+            token_count = usage.get("total_tokens", 0)
+            api_calls = usage.get("api_calls", 0)
+            cost = usage.get("estimated_cost", 0.0)
 
-                    tool_purpose_data = {
-                        "name": cli_tool.name,
-                        "purpose": getattr(cli_tool, "purpose", "") or "",
-                        "background": getattr(cli_tool, "background", "") or "",
-                        "use_cases": use_cases,
-                        "testing_considerations": testing_considerations,
-                    }
-                    export_dict_to_json(
-                        tool_purpose_data,
-                        purpose_dir / "tool_purpose.json",
-                    )
-
-                    # Export command purposes
-                    command_purposes = {}
-                    for command in cli_tool.commands:
-                        # Check if command has the attributes we need
-                        if (
-                            hasattr(command, "name")
-                            and hasattr(command, "purpose")
-                            and hasattr(command, "description")
-                        ):
-                            command_purposes[command.name] = {  # type: ignore
-                                "name": command.name,  # type: ignore
-                                "purpose": command.purpose or "",  # type: ignore
-                                "description": command.description or "",  # type: ignore
-                            }
-                    export_dict_to_json(
-                        command_purposes,
-                        purpose_dir / "command_purposes.json",
-                    )
-
-            # Complete task
-            progress.update(task, description="Analysis complete!", completed=True)
-
-        # Print summary
-        command_count = len(cli_tool.commands)
-        # Count top-level commands vs subcommands
-        top_level_count = sum(
-            1 for cmd in cli_tool.commands if not getattr(cmd, "is_subcommand", False)
-        )
-        subcommand_count = command_count - top_level_count
-
-        # Count commands with purpose
-        purposes_count = 0
-        for cmd in cli_tool.commands:
-            if hasattr(cmd, "purpose") and getattr(cmd, "purpose", None):
-                purposes_count += 1
-
-        summary = [
-            f"[bold green]Analysis of {tool_path} completed![/bold green]",
-            f"Found {top_level_count} top-level commands and {subcommand_count} subcommands (total: {command_count}).",
-        ]
-
-        if enhanced:
-            summary.append(
-                f"Tool purpose: {getattr(cli_tool, 'purpose', '')[:100] + '...' if hasattr(cli_tool, 'purpose') and cli_tool.purpose and len(cli_tool.purpose) > 100 else getattr(cli_tool, 'purpose', '') or 'Not available'}"
+            console.print(
+                f"[blue]LLM Usage: {token_count} tokens in {api_calls} API calls "
+                f"(estimated cost: ${cost:.4f})[/blue]"
             )
-            summary.append(f"Commands with purpose information: {purposes_count}/{command_count}")
 
-        rprint(Panel.fit("\n".join(summary)))
+        # Display summary
+        with spinner("Analysis complete!"):
+            # Calculate command stats
+            top_level_count = 0
+            subcommand_count = 0
 
-        if output_file:
-            rprint(f"[bold]Results saved to:[/bold] {output_file}")
+            for cmd in cli_tool.commands:
+                if not getattr(cmd, "is_subcommand", False):
+                    top_level_count += 1
+                else:
+                    subcommand_count += 1
+
+            # Purpose for output
+            purpose = getattr(cli_tool, "purpose", "")
+            if purpose and len(purpose) > 100:
+                purpose = purpose[:97] + "..."
+
+            purpose_count = sum(
+                1 for cmd in cli_tool.commands if hasattr(cmd, "purpose") and cmd.purpose
+            )
+
+            # Create a panel with results
+            panel_content = [
+                f"Analysis of {tool_name} completed!",
+                f"Found {top_level_count} top-level commands and {subcommand_count} subcommands (total: {len(cli_tool.commands)}).",
+            ]
+
+            if purpose:
+                panel_content.append(f"Tool purpose: {purpose}")
+
+            panel_content.append(
+                f"Commands with purpose information: {purpose_count}/{len(cli_tool.commands)}"
+            )
+
+            if output:
+                panel_content.append(f"Results saved to: {output_file}")
+
+            console.print(Panel("\n".join(panel_content), expand=False))
+
+        # Short version in case the panel is too large for some terminals
+        console.print(
+            Panel(
+                "\n".join(
+                    [
+                        f"Analysis of {tool_name} completed!",
+                        f"Found {top_level_count} top-level commands.",
+                        f"Results saved to: {output}" if output else "",
+                    ]
+                ),
+                expand=False,
+            )
+        )
 
     except Exception as e:
-        logger.exception(f"Failed to analyze tool: {str(e)}")
-        rprint(f"[bold red]Error:[/bold red] {str(e)}")
-
-        # If in interactive mode and we modified the extract_commands function, restore it
-        if interactive and "analyzer" in locals() and "original_extract_commands" in locals():
-            if isinstance(analyzer, StandardCLIAnalyzer) and hasattr(analyzer, "extract_commands"):
-                analyzer.extract_commands = original_extract_commands  # type: ignore
-            elif isinstance(analyzer, LLMEnhancedAnalyzer) and hasattr(
-                analyzer, "standard_analyzer"
-            ):
-                analyzer.standard_analyzer.extract_commands = original_extract_commands  # type: ignore
+        spinner.stop()
+        console.print(f"[red]Error analyzing tool: {str(e)}[/red]")
+        if verbose:
+            console.print_exception()
+        raise typer.Exit(1)
 
 
 def export_to_json(cli_tool: Any, output_file: Path) -> None:

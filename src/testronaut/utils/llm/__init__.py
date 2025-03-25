@@ -145,6 +145,7 @@ class LLMService:
         self.provider_name = self.settings.llm.provider
         self.provider_settings = self.settings.llm.current_provider_settings
         self._provider: Optional[LLMProvider] = None
+        self.last_token_usage: Optional[Dict[str, Any]] = None
 
         # Import provider modules to register them
         try:
@@ -235,6 +236,19 @@ class LLMService:
                 stop_sequences=stop_sequences,
             )
 
+            # Store token usage if available
+            # This assumes that OpenAI provider sets this attribute
+            self.last_token_usage = getattr(self.provider, "last_token_usage", None)
+
+            # Log token usage if available
+            if self.last_token_usage:
+                logger.debug(
+                    "LLM token usage",
+                    provider=self.provider_name,
+                    model=model,
+                    tokens=self.last_token_usage.get("total_tokens", 0),
+                )
+
             logger.debug(
                 "Generated text with LLM", provider=self.provider_name, result_length=len(result)
             )
@@ -273,29 +287,40 @@ class LLMService:
         try:
             # Use default temperature if not specified
             if temperature is None:
-                # Use a lower temperature for structured outputs
-                temperature = min(0.2, self.settings.llm.temperature)
+                temperature = self.settings.llm.temperature
 
+            # Get model from settings
             model = self.settings.llm.get_model_for_task("json")
 
             logger.debug(
                 "Generating JSON with LLM",
                 provider=self.provider_name,
                 model=model,
+                schema_size=len(json.dumps(schema)),
                 system_prompt_length=len(system_prompt) if system_prompt else 0,
                 prompt_length=len(prompt),
                 temperature=temperature,
             )
 
             result = self.provider.generate_json(
-                prompt=prompt, schema=schema, system_prompt=system_prompt, temperature=temperature
+                prompt=prompt,
+                schema=schema,
+                system_prompt=system_prompt,
+                temperature=temperature,
             )
 
-            logger.debug(
-                "Generated JSON with LLM",
-                provider=self.provider_name,
-                result_keys=list(result.keys()) if result else None,
-            )
+            # Store token usage if available
+            # This assumes that OpenAI provider sets this attribute
+            self.last_token_usage = getattr(self.provider, "last_token_usage", None)
+
+            # Log token usage if available
+            if self.last_token_usage:
+                logger.debug(
+                    "LLM token usage",
+                    provider=self.provider_name,
+                    model=model,
+                    tokens=self.last_token_usage.get("total_tokens", 0),
+                )
 
             return result
 
@@ -306,5 +331,6 @@ class LLMService:
                     "provider": self.provider_name,
                     "error": str(e),
                     "prompt_length": len(prompt),
+                    "schema_size": len(json.dumps(schema)),
                 },
             ) from e
