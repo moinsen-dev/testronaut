@@ -3,7 +3,7 @@ LLM Manager Interface.
 
 This module defines the interface for interacting with Language Learning Models.
 """
-from typing import Dict, Any, List, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, List, Protocol, runtime_checkable
 
 
 @runtime_checkable

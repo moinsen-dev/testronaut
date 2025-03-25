@@ -5,11 +5,11 @@ This module provides the foundation for all database models in the Testronaut ap
 It includes base model classes, utility methods, and database configuration.
 """
 from datetime import datetime
-from typing import Optional, Dict, Any, TypeVar, Generic, List
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 from uuid import uuid4
 
-from sqlmodel import Field, SQLModel, Session, create_engine, select
-from pydantic import validator, field_validator
+from pydantic import field_validator
+from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 # Type variable for generic repository
 T = TypeVar('T', bound=SQLModel)

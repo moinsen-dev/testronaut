@@ -4,9 +4,8 @@ Revision ID: 001_initial
 Create Date: 2024-03-24
 
 """
-from alembic import op
 import sqlalchemy as sa
-import sqlmodel
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = '001_initial'

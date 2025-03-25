@@ -4,8 +4,8 @@ Database migration utilities.
 This module provides functions to manage database migrations with Alembic.
 """
 import os
-import sys
 import subprocess
+import sys
 from pathlib import Path
 from typing import List, Optional
 

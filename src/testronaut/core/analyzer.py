@@ -6,14 +6,13 @@ It uses a combination of parsing help text and LLM-based analysis to understand
 the CLI tool's capabilities.
 """
 
-import subprocess
-from typing import Dict, List, Optional, Any
-from pathlib import Path
 import logging
+import subprocess
+from typing import Any, Dict, List, Optional
 
 from testronaut.llm.manager import LLMManager
 from testronaut.models.cli_tool import CLITool
-from testronaut.models.command import Command, Option, Argument
+from testronaut.models.command import Argument, Command, Option
 
 logger = logging.getLogger(__name__)
 

@@ -4,9 +4,8 @@ Mock LLM Provider for testing and development.
 This module provides a mock implementation of the LLM provider interface
 that returns predefined responses for testing.
 """
-import json
 import random
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from testronaut.utils.llm import LLMProviderRegistry
 

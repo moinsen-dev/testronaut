@@ -4,17 +4,16 @@ Structured logging module for Testronaut.
 This module provides context-aware structured logging for the Testronaut application.
 """
 import json
-import sys
-import os
 import logging
-from typing import Any, Dict, Optional
-from datetime import datetime
+import os
+import sys
 import uuid
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 import structlog
 from rich.console import Console
 from rich.logging import RichHandler
-
 
 # Configure structlog
 structlog.configure(

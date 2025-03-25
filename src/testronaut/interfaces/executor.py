@@ -3,10 +3,10 @@ Test Executor Interface.
 
 This module defines the interface for executing test cases and test plans.
 """
-from typing import List, Dict, Any, Optional, Protocol, runtime_checkable
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
-from testronaut.models import TestPlan, TestCase, TestResult, Dependency
+from testronaut.models import Dependency, TestCase, TestPlan, TestResult
 
 
 @runtime_checkable

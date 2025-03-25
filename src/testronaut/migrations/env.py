@@ -7,9 +7,8 @@ import os
 import sys
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 # Add the project root directory to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
@@ -17,8 +16,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 # Import the SQLModel Base and all models to register them with the metadata
 # This is important so Alembic can detect changes to the models
 from testronaut.models import BaseModel
-from testronaut.models.cli_tool import CLITool, Command, Option, Argument, Example
-from testronaut.models.test_plan import TestPlan, TestCase, Dependency, TestResult, TestReport
 
 # This is the Alembic Config object, which provides
 # access to the values within the .ini file

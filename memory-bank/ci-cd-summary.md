@@ -10,7 +10,7 @@ Phase 002 of the Testronaut project focused on implementing robust CI/CD (Contin
 - **Purpose**: Run tests and code quality checks on pull requests and pushes to main
 - **Features**:
   - Uses latest actions (checkout v4.2.2, setup-python v5)
-  - Implements matrix testing across Python 3.10, 3.11, 3.12, and 3.13
+  - Runs on Python 3.13 for faster workflow execution
   - Uses astral-sh/setup-uv@v5 for dependency management
   - Runs pytest with coverage reporting
   - Performs linting with ruff and type checking with mypy
@@ -25,6 +25,7 @@ Phase 002 of the Testronaut project focused on implementing robust CI/CD (Contin
   - Uses Python 3.13 for consistency
   - Caches dependencies for faster runs
   - Generates API documentation from code comments
+  - Includes all required MkDocs plugins (material, autorefs, mkdocstrings)
 
 ### Release Workflow (`release.yml`)
 - **Purpose**: Create releases and publish packages to PyPI
@@ -42,6 +43,7 @@ Phase 002 of the Testronaut project focused on implementing robust CI/CD (Contin
   - Uses Safety to scan for package vulnerabilities
   - Implements Bandit for static security analysis
   - Integrates CodeQL for comprehensive code scanning
+  - Performs dependency review checks on pull requests (not after merge)
   - Reports security issues as GitHub issues
 
 ## Local Testing Tools
@@ -73,7 +75,7 @@ Phase 002 of the Testronaut project focused on implementing robust CI/CD (Contin
 ## Key Technical Decisions
 
 1. **GitHub Actions vs Alternatives**: Selected GitHub Actions for tight integration with repository
-2. **Python Versions**: Standardized on Python 3.13 for build jobs while testing compatibility with 3.10+
+2. **Python Versions**: Standardized on Python 3.13 for all CI/CD jobs to reduce workflow time
 3. **Dependency Management**: Chose uv over pip/poetry for speed and reliability
 4. **Documentation Generator**: Selected MkDocs with Material theme for modern, responsive documentation
 5. **Security Scanning**: Implemented multiple tools (Safety, Bandit, CodeQL) for comprehensive security

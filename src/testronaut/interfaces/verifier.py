@@ -3,7 +3,7 @@ Result Verifier Interface.
 
 This module defines the interface for verifying test results against expected outputs.
 """
-from typing import Dict, Any, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, Protocol, runtime_checkable
 
 from testronaut.models import TestCase, TestResult
 

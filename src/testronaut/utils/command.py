@@ -5,12 +5,10 @@ This module provides utilities for executing shell commands with timeout and err
 """
 import os
 import shlex
-import signal
 import subprocess
-import threading
-from pathlib import Path
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union, Any, Callable, Tuple
+from pathlib import Path
+from typing import Callable, Dict, List, Optional, Union
 
 from testronaut.utils.errors import CommandExecutionError, TimeoutError
 from testronaut.utils.logging import get_logger

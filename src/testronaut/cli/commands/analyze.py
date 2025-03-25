@@ -2,9 +2,10 @@
 Command module for analyzing CLI tools.
 """
 
-import typer
 from pathlib import Path
 from typing import Optional
+
+import typer
 from rich.console import Console
 
 console = Console()

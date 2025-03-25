@@ -3,10 +3,10 @@ Test Executor Factory.
 
 This module provides a factory for creating test executor components.
 """
-from typing import Dict, Any, Type, Optional
+from typing import Dict, Type
 
-from testronaut.interfaces import TestExecutor
 from testronaut.factory import Factory, registry
+from testronaut.interfaces import TestExecutor
 from testronaut.utils.errors import ConfigurationError
 
 

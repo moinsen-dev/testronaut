@@ -2,13 +2,13 @@
 Module for generating tests from analyzed CLI tool data.
 """
 
-from typing import Dict, List, Optional, Any
-import os
 import json
+import os
 from pathlib import Path
+from typing import List
 
 from testronaut.core.models import CliTool, Command
-from testronaut.core.models.test_plan import TPTestPlan, TPTestCase
+from testronaut.core.models.test_plan import TPTestCase, TPTestPlan
 
 
 class TestPlanGenerator:
@@ -225,13 +225,13 @@ class Test{test_plan.tool_name.capitalize().replace('-', '_')}:
 """)
                 # Add expected output checks
                 if test_case.expected_output_contains:
-                    f.write(f"        # Check expected output\n")
+                    f.write("        # Check expected output\n")
                     for expected in test_case.expected_output_contains:
                         f.write(f'        assert "{expected}" in result.stdout.lower(), f"Expected output to contain \\"{expected}\\", but it did not."\n')
 
                 # Add expected error checks
                 if test_case.expected_error_contains:
-                    f.write(f"        # Check expected errors\n")
+                    f.write("        # Check expected errors\n")
                     for expected in test_case.expected_error_contains:
                         f.write(f'        assert "{expected}" in result.stderr.lower(), f"Expected error to contain \\"{expected}\\", but it did not."\n')
 
