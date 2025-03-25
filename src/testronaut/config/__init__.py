@@ -54,10 +54,44 @@ class LoggingSettings(BaseSettings):
 class DatabaseSettings(BaseSettings):
     """Database configuration settings."""
 
-    url: str = Field(default="sqlite:///testronaut.db", description="Database connection URL")
+    url: str = Field(
+        default="sqlite:///${config_path}/testronaut.db", description="Database connection URL"
+    )
     echo: bool = Field(default=False, description="Whether to echo SQL statements")
     pool_size: int = Field(default=5, description="Database connection pool size")
     pool_recycle: int = Field(default=3600, description="Connection recycle time in seconds")
+
+    def get_resolved_url(self, config_path: Optional[str] = None) -> str:
+        """
+        Get the database URL with variables resolved.
+
+        Args:
+            config_path: Optional config path to use instead of the placeholder
+
+        Returns:
+            Resolved database URL with actual paths
+        """
+        if config_path:
+            # Replace the placeholder with the actual config path
+            expanded_path = str(Path(os.path.expanduser(config_path)))
+            return self.url.replace("${config_path}", expanded_path)
+
+        # If no config path provided, just expand user directory
+        if "~" in self.url:
+            parts = self.url.split("://")
+            if len(parts) > 1:
+                prefix = parts[0] + "://"
+                path = parts[1]
+                expanded_path = os.path.expanduser(path)
+                return prefix + expanded_path
+
+        # If ${config_path} is in the URL but no config_path was provided
+        if "${config_path}" in self.url:
+            # Default to ~/.testronaut
+            default_config_path = os.path.expanduser("~/.testronaut")
+            return self.url.replace("${config_path}", default_config_path)
+
+        return self.url
 
 
 class LLMSettings(BaseSettings):
@@ -194,6 +228,17 @@ class Settings(BaseSettings):
         """Get the configuration directory path."""
         return Path(os.path.expanduser(self.config_dir))
 
+    def model_post_init(self, __context: Any) -> None:
+        """Post-initialization to resolve database URL with config path."""
+        # Make sure the config directory exists
+        config_path = os.path.expanduser(self.config_dir)
+        os.makedirs(config_path, exist_ok=True)
+
+        # Resolve the database URL using the config path
+        if hasattr(self.database, "get_resolved_url"):
+            resolved_url = self.database.get_resolved_url(config_path)
+            self.database.url = resolved_url
+
 
 def load_config_file(file_path: Union[str, Path]) -> Dict[str, Any]:
     """
@@ -266,32 +311,57 @@ def save_config_file(config: Dict[str, Any], file_path: Union[str, Path]) -> Non
 
 def load_settings(config_file: Optional[Union[str, Path]] = None) -> Settings:
     """
-    Load settings from a configuration file and environment variables.
+    Load settings from config file and environment variables.
 
     Args:
-        config_file: Path to the configuration file. If None, the default location is used.
+        config_file: Path to config file. If None, will search default locations.
 
     Returns:
-        The loaded settings.
+        The loaded settings object
 
     Raises:
-        ConfigurationError: If the settings cannot be loaded.
+        ConfigurationError: If there is an error loading the configuration
     """
-    # Start with default settings
+    # Default config file path
+    if config_file is None:
+        config_dir = os.path.expanduser("~/.testronaut")
+        config_file = os.path.join(config_dir, "config.yaml")
+
+    # Create a new settings object with defaults
     settings = Settings()
 
-    # If a config file is specified, load it
-    if config_file:
-        config_data = load_config_file(config_file)
-        settings = Settings.model_validate(config_data)
-    else:
-        # Look for config file in default location
-        default_config = settings.config_path / "config.yaml"
-        if default_config.exists():
-            config_data = load_config_file(default_config)
-            settings = Settings.model_validate(config_data)
+    # If config file exists, load values from it
+    if os.path.exists(config_file):
+        try:
+            config_dict = load_config_file(config_file)
+            # Update settings from the loaded config
+            for key, value in config_dict.items():
+                if hasattr(settings, key):
+                    # Handle nested settings
+                    if key in ["logging", "database", "llm", "execution"] and isinstance(
+                        value, dict
+                    ):
+                        nested_settings = getattr(settings, key)
+                        for nested_key, nested_value in value.items():
+                            if hasattr(nested_settings, nested_key):
+                                setattr(nested_settings, nested_key, nested_value)
+                    else:
+                        setattr(settings, key, value)
+        except Exception as e:
+            raise ConfigurationError(
+                f"Error loading configuration from {config_file}: {str(e)}"
+            ) from e
 
-    # Environment variables are handled by the model validators
+    # Initialize database using the loaded settings
+    from testronaut.models.base import initialize_db
+
+    # Make sure the config directory exists
+    os.makedirs(settings.config_path, exist_ok=True)
+
+    # Initialize database with the resolved URL
+    resolved_url = settings.database.get_resolved_url(str(settings.config_path))
+    initialize_db(resolved_url)
+
     return settings
 
 

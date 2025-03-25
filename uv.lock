@@ -1226,6 +1226,8 @@ version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "anthropic" },
+    { name = "openai" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rich" },
@@ -1262,16 +1264,12 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
 ]
-llm = [
-    { name = "anthropic" },
-    { name = "openai" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.15.1" },
+    { name = "anthropic", specifier = ">=0.8.0" },
     { name = "anthropic", marker = "extra == 'all'", specifier = ">=0.49.0" },
-    { name = "anthropic", marker = "extra == 'llm'", specifier = ">=0.8.0" },
     { name = "black", marker = "extra == 'all'", specifier = ">=25.1.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=25.1.0" },
     { name = "mkdocs", marker = "extra == 'all'", specifier = ">=1.6.1" },
@@ -1284,8 +1282,8 @@ requires-dist = [
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.29.0" },
     { name = "mypy", marker = "extra == 'all'", specifier = ">=1.15.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.15.0" },
+    { name = "openai", specifier = ">=1.12.0" },
     { name = "openai", marker = "extra == 'all'", specifier = ">=1.68.2" },
-    { name = "openai", marker = "extra == 'llm'", specifier = ">=1.12.0" },
     { name = "pydantic", specifier = ">=2.10.6" },
     { name = "pytest", marker = "extra == 'all'", specifier = ">=8.3.5" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.5" },

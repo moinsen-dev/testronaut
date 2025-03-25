@@ -250,25 +250,59 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
         # If we got no examples or just a few, try with LLM
         if len(examples) < 2:
             try:
-                tool_name = command.cli_tool.name
-                command_name = command.name
-                help_text = command.help_text or self.get_command_help_text(
-                    tool_name,
-                    command_name,
-                    parent_path=command.parent_command.name if command.parent_command else "",
-                )
+                # Safely access the CLI tool name - it might be an ID string or the actual object
+                if hasattr(command, "cli_tool_id") and command.cli_tool_id:
+                    tool_name = command.cli_tool_id  # Use ID directly if needed
+                elif hasattr(command, "cli_tool") and command.cli_tool:
+                    # Check if cli_tool is a string or an object
+                    if isinstance(command.cli_tool, str):
+                        tool_name = command.cli_tool
+                    else:
+                        # Try to access the name attribute safely
+                        tool_name = getattr(command.cli_tool, "name", str(command.cli_tool))
+                else:
+                    # Fallback to a default if no CLI tool info is available
+                    logger.warning(
+                        f"No CLI tool info available for command {command.name}, using command name as fallback"
+                    )
+                    tool_name = command.name
 
+                # Get the command name safely
+                command_name = getattr(command, "name", str(command))
+
+                # Get appropriate help text
+                if hasattr(command, "help_text") and command.help_text:
+                    help_text = command.help_text
+                else:
+                    # Try to determine parent path
+                    parent_path = ""
+                    if hasattr(command, "parent_command") and command.parent_command:
+                        parent_path = getattr(command.parent_command, "name", "")
+
+                    # Try to get help text from command execution
+                    try:
+                        help_text = self.get_command_help_text(
+                            tool_name, command_name, parent_path=parent_path
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to get help text for {command_name}: {str(e)}")
+                        help_text = f"Command {command_name} for tool {tool_name}"
+
+                # Extract examples using LLM
                 llm_examples = self._extract_examples_with_llm(tool_name, command_name, help_text)
 
                 # Merge examples, avoiding duplicates
-                existing_cmd_lines = {ex.get("command_line") for ex in examples}
+                existing_cmd_lines = {ex.get("command_line", "") for ex in examples}
                 for ex in llm_examples:
-                    if ex.get("command_line") not in existing_cmd_lines:
+                    cmd_line = ex.get("command_line", "")
+                    if cmd_line and cmd_line not in existing_cmd_lines:
                         examples.append(ex)
-                        existing_cmd_lines.add(ex.get("command_line"))
+                        existing_cmd_lines.add(cmd_line)
 
-            except (CommandExecutionError, LLMServiceError, ValidationError) as e:
-                logger.warning(f"Failed to enhance examples with LLM: {str(e)}")
+            except Exception as e:
+                logger.error(
+                    f"Failed to generate examples for {getattr(command, 'name', 'unknown')}: {str(e)}"
+                )
 
         return examples
 
@@ -663,11 +697,30 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
 
     def _verify_and_complete_command(self, command: Command) -> None:
         """
-        Verify that a command has complete information and use LLM to fill gaps.
+        Verify command details are complete and generate missing information with LLM.
 
         Args:
             command: The command to verify and complete.
         """
+        # Add help text if missing
+        if not command.help_text:
+            logger.info(f"Generating missing help text for command: {command.name}")
+            try:
+                command_path = command.name
+                if getattr(command, "parent_command", None):
+                    parent_name = getattr(getattr(command, "parent_command", None), "name", "")
+                    if parent_name:
+                        command_path = f"{parent_name} {command_path}"
+
+                help_text = self.get_command_help_text(
+                    command.cli_tool.name,
+                    command.name,
+                    parent_path=parent_name if "parent_name" in locals() else "",
+                )
+                command.help_text = help_text
+            except Exception as e:
+                logger.error(f"Failed to generate help text for {command.name}: {str(e)}")
+
         # Check if options are missing but likely needed
         if not command.options and "option" in (command.help_text or "").lower():
             logger.info(f"Generating missing options for command: {command.name}")
@@ -675,7 +728,11 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
                 cmd_data = self._extract_command_structure_with_llm(
                     command.cli_tool.name, command.name, command.help_text or ""
                 )
-                if "options" in cmd_data and isinstance(cmd_data["options"], list):
+                if (
+                    isinstance(cmd_data, dict)
+                    and "options" in cmd_data
+                    and isinstance(cmd_data["options"], list)
+                ):
                     for opt_data in cmd_data["options"]:
                         option = Option(
                             command_id=command.id,
@@ -687,7 +744,7 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
                         )
                         command.options.append(option)
             except Exception as e:
-                logger.warning(f"Failed to generate options for {command.name}: {str(e)}")
+                logger.error(f"Failed to generate options for {command.name}: {str(e)}")
 
         # Check if arguments are missing but likely needed
         if not command.arguments and "argument" in (command.help_text or "").lower():
@@ -696,7 +753,11 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
                 cmd_data = self._extract_command_structure_with_llm(
                     command.cli_tool.name, command.name, command.help_text or ""
                 )
-                if "arguments" in cmd_data and isinstance(cmd_data["arguments"], list):
+                if (
+                    isinstance(cmd_data, dict)
+                    and "arguments" in cmd_data
+                    and isinstance(cmd_data["arguments"], list)
+                ):
                     for i, arg_data in enumerate(cmd_data["arguments"]):
                         argument = Argument(
                             command_id=command.id,
@@ -707,7 +768,7 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
                         )
                         command.arguments.append(argument)
             except Exception as e:
-                logger.warning(f"Failed to generate arguments for {command.name}: {str(e)}")
+                logger.error(f"Failed to generate arguments for {command.name}: {str(e)}")
 
         # Check if examples are missing
         if not command.examples:
@@ -725,15 +786,18 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
                                 )
                             )
             except Exception as e:
-                logger.warning(f"Failed to generate examples for {command.name}: {str(e)}")
+                logger.error(f"Failed to generate examples for {command.name}: {str(e)}")
 
-    def analyze_cli_tool(self, tool_name: str, version: Optional[str] = None) -> CLITool:
+    def analyze_cli_tool(
+        self, tool_name: str, version: Optional[str] = None, max_commands: Optional[int] = None
+    ) -> CLITool:
         """
         Analyze a CLI tool and extract its commands, options, and arguments with LLM enhancement.
 
         Args:
             tool_name: The name of the CLI tool to analyze.
             version: Optional specific version of the tool to analyze.
+            max_commands: Maximum number of commands to analyze (default: automatically determined).
 
         Returns:
             A CLITool object with all extracted information.
@@ -745,9 +809,11 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
         logger.info(f"Starting LLM-enhanced analysis of CLI tool: {tool_name}")
         logger.info("Phase 1/4: Running standard analysis...")
 
-        # First analyze with standard analyzer
+        # First analyze with standard analyzer (enforcing command limit)
         start_time = time.time()
-        cli_tool = self.standard_analyzer.analyze_cli_tool(tool_name, version)
+        cli_tool = self.standard_analyzer.analyze_cli_tool(
+            tool_name, version, max_commands=max_commands
+        )
         standard_time = time.time() - start_time
         logger.info(f"Standard analysis completed in {standard_time:.2f} seconds")
 
@@ -791,12 +857,25 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
             if cli_tool.commands:
                 logger.info("Phase 3/4: Enhancing commands with purposes and details...")
                 start_time = time.time()
-                for command in cli_tool.commands:
-                    logger.info(f"Analyzing purpose for command: {command.name}")
-                    command.purpose = self._analyze_subcommand_purpose(command)
 
-                    # Verify and complete command details
-                    self._verify_and_complete_command(command)
+                # Keep track of errors during enhancement
+                enhancement_errors = 0
+
+                for command in cli_tool.commands:
+                    try:
+                        logger.info(f"Analyzing purpose for command: {command.name}")
+                        command.purpose = self._analyze_subcommand_purpose(command)
+
+                        # Verify and complete command details
+                        self._verify_and_complete_command(command)
+                    except Exception as e:
+                        logger.error(f"Error enhancing command {command.name}: {str(e)}")
+                        enhancement_errors += 1
+
+                if enhancement_errors > 0:
+                    logger.warning(
+                        f"Encountered {enhancement_errors} errors during command enhancement"
+                    )
 
                 logger.info(
                     f"Command enhancement completed in {time.time() - start_time:.2f} seconds"
@@ -806,16 +885,19 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
             if cli_tool.commands:
                 logger.info("Phase 4/4: Analyzing command relationships...")
                 start_time = time.time()
-                relationships = self._analyze_command_relationships(cli_tool)
-                if relationships:
-                    # Use the helper function to add relationship analysis
-                    add_relationship_analysis(cli_tool, relationships)
+                try:
+                    relationships = self._analyze_command_relationships(cli_tool)
+                    if relationships:
+                        # Use the helper function to add relationship analysis
+                        add_relationship_analysis(cli_tool, relationships)
 
-                    # Apply relationship insights to the command structure
-                    self._apply_relationship_insights(cli_tool, relationships)
-                logger.info(
-                    f"Relationship analysis completed in {time.time() - start_time:.2f} seconds"
-                )
+                        # Apply relationship insights to the command structure
+                        self._apply_relationship_insights(cli_tool, relationships)
+                    logger.info(
+                        f"Relationship analysis completed in {time.time() - start_time:.2f} seconds"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to analyze command relationships: {str(e)}")
 
             logger.info("LLM-enhanced analysis complete!")
             return cli_tool

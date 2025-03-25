@@ -6,6 +6,7 @@ It includes base model classes, utility methods, and database configuration.
 """
 
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 from uuid import uuid4
@@ -35,20 +36,66 @@ class BaseModel(SQLModel):
         json_encoders = {datetime: lambda dt: dt.isoformat()}
 
 
-# Database configuration
-DATABASE_URL = "sqlite:///testronaut.db"
+# Initialize with a default database URL, will be updated during initialization
+# Default to creating the database in the user's config directory
+DEFAULT_CONFIG_DIR = os.path.expanduser("~/.testronaut")
+os.makedirs(DEFAULT_CONFIG_DIR, exist_ok=True)
+DEFAULT_DATABASE_URL = f"sqlite:///{DEFAULT_CONFIG_DIR}/testronaut.db"
 
-# Default to echo=False, will be configured via CLI flags
-engine = create_engine(DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
+# Global variables
+engine = None
+DATABASE_URL = DEFAULT_DATABASE_URL
 
 
-def create_db_and_tables():
+def initialize_db(db_url: Optional[str] = None) -> None:
+    """
+    Initialize the database engine with the given URL.
+
+    Args:
+        db_url: Database URL to use, or None to use the default
+    """
+    global engine, DATABASE_URL
+
+    if db_url:
+        DATABASE_URL = db_url
+
+    connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
+    # Create engine with the updated URL
+    engine = create_engine(DATABASE_URL, echo=False, connect_args=connect_args)
+
+    logger = logging.getLogger(__name__)
+    logger.debug(f"Initialized database engine with URL: {DATABASE_URL}")
+
+
+# Initialize with the default URL
+initialize_db()
+
+
+def create_db_and_tables() -> None:
     """Create database and tables if they don't exist."""
+    global engine
+
+    if engine is None:
+        initialize_db()
+
+    # Make sure the directory exists for SQLite databases
+    if DATABASE_URL.startswith("sqlite:///"):
+        db_path = DATABASE_URL.replace("sqlite:///", "")
+        db_dir = os.path.dirname(db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+
     SQLModel.metadata.create_all(engine)
 
 
 def get_session():
     """Get a new database session."""
+    global engine
+
+    if engine is None:
+        initialize_db()
+
     with Session(engine) as session:
         yield session
 
@@ -73,13 +120,15 @@ def configure_sql_logging(debug: bool = False) -> None:
         logging.getLogger("sqlalchemy.orm").setLevel(logging.DEBUG)
 
         # Update engine echo setting
-        engine.echo = True
+        if engine:
+            engine.echo = True
     else:
         # Set to WARNING by default to avoid overwhelming output
         logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
 
         # Update engine echo setting
-        engine.echo = False
+        if engine:
+            engine.echo = False
 
 
 class Repository(Generic[T]):
@@ -106,6 +155,11 @@ class Repository(Generic[T]):
         Returns:
             The model instance or None if not found
         """
+        global engine
+
+        if engine is None:
+            initialize_db()
+
         with Session(engine) as session:
             return session.get(self.model_class, id)
 
@@ -121,6 +175,11 @@ class Repository(Generic[T]):
         Returns:
             List of model instances
         """
+        global engine
+
+        if engine is None:
+            initialize_db()
+
         with Session(engine) as session:
             query = select(self.model_class)
 
@@ -142,6 +201,11 @@ class Repository(Generic[T]):
         Returns:
             The created model with ID
         """
+        global engine
+
+        if engine is None:
+            initialize_db()
+
         with Session(engine) as session:
             session.add(model)
             session.commit()
@@ -159,6 +223,11 @@ class Repository(Generic[T]):
         Returns:
             The updated model or None if not found
         """
+        global engine
+
+        if engine is None:
+            initialize_db()
+
         with Session(engine) as session:
             model = session.get(self.model_class, id)
             if model is None:
@@ -184,6 +253,11 @@ class Repository(Generic[T]):
         Returns:
             True if deleted, False if not found
         """
+        global engine
+
+        if engine is None:
+            initialize_db()
+
         with Session(engine) as session:
             model = session.get(self.model_class, id)
             if model is None:
