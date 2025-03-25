@@ -1,150 +1,20 @@
 {
   "name": "testronaut",
   "version": "0.4.0",
-  "help_text": "                                                                                                                                                            \n Usage: testronaut [OPTIONS] COMMAND [ARGS]...                                                                                                              \n                                                                                                                                                            \n Automated CLI Testing Framework                                                                                                                            \n                                                                                                                                                            \n\u256d\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 --version             -V            Show version and exit                                                                                                \u2502\n\u2502 --verbose             -v            Enable verbose output                                                                                                \u2502\n\u2502 --log-file                    TEXT  Log to file [default: None]                                                                                          \u2502\n\u2502 --sql-debug                         Enable detailed SQL query logging                                                                                    \u2502\n\u2502 --install-completion                Install completion for the current shell.                                                                            \u2502\n\u2502 --show-completion                   Show completion for the current shell, to copy it or customize the installation.                                     \u2502\n\u2502 --help                              Show this message and exit.                                                                                          \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\u256d\u2500 Commands \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 config    Configuration management commands                                                                                                              \u2502\n\u2502 analyze   Analyze CLI tools and generate test plans                                                                                                      \u2502\n\u2502 execute   Execute tests from test plans                                                                                                                  \u2502\n\u2502 verify    Verify test results                                                                                                                            \u2502\n\u2502 db        Database management commands                                                                                                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n",
-  "id": "4d5df68c-25ea-4bcf-975f-406c92a514b0",
-  "created_at": "2025-03-25T10:41:58.628605",
+  "help_text": "                                                                                                                                                                         \n Usage: testronaut [OPTIONS] COMMAND [ARGS]...                                                                                                                           \n                                                                                                                                                                         \n Automated CLI Testing Framework                                                                                                                                         \n                                                                                                                                                                         \n\u256d\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 --version             -V            Show version and exit                                                                                                             \u2502\n\u2502 --verbose             -v            Enable verbose output                                                                                                             \u2502\n\u2502 --log-file                    TEXT  Log to file [default: None]                                                                                                       \u2502\n\u2502 --sql-debug                         Enable detailed SQL query logging                                                                                                 \u2502\n\u2502 --install-completion                Install completion for the current shell.                                                                                         \u2502\n\u2502 --show-completion                   Show completion for the current shell, to copy it or customize the installation.                                                  \u2502\n\u2502 --help                              Show this message and exit.                                                                                                       \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\u256d\u2500 Commands \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 config    Configuration management commands                                                                                                                           \u2502\n\u2502 analyze   Analyze CLI tools and generate test plans                                                                                                                   \u2502\n\u2502 execute   Execute tests from test plans                                                                                                                               \u2502\n\u2502 verify    Verify test results                                                                                                                                         \u2502\n\u2502 db        Database management commands                                                                                                                                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n",
+  "id": "65be744d-2dcf-4fbb-b121-2c7b9d401f0d",
+  "created_at": "2025-03-25T18:25:29.324407",
   "updated_at": null,
   "install_command": null,
-  "description": "The 'unknown' command is part of the Testronaut Automated CLI Testing Framework. It provides the ability to automate testing of command-line interface (CLI) tools. Key functionalities include configuration management, analysis of CLI tools to generate test plans, execution of tests from these plans, and verification of test results. Additional options include enabling verbose output, logging to a file, detailed SQL query logging, and installing or showing completion for the current shell.",
-  "purpose": "Testronaut is an automated CLI testing framework designed to perform comprehensive analysis, execution and verification of CLI tools. It aims to automate and simplify the testing process for command line interface tools.",
-  "background": "Understanding command line interfaces (CLI), SQL query logging, and test planning is important for using this tool. Familiarity with configuration management and understanding of test execution and verification are also necessary.",
-  "use_cases": [
-    "Automating the testing process for CLI tools",
-    "Generating comprehensive test plans for CLI tools",
-    "Executing tests from generated test plans",
-    "Verifying test results",
-    "Logging activities for detailed review"
-  ],
-  "testing_considerations": [
-    "Check whether the tool is correctly analyzing the CLI tools and generating accurate test plans",
-    "Verify whether the tool is correctly executing the tests from the test plans",
-    "Ensure the tool can handle verbose output and log to file options",
-    "Make sure the SQL debug feature logs SQL queries as expected",
-    "Check whether the test results verification is accurate"
-  ],
+  "description": null,
+  "purpose": null,
+  "background": null,
+  "use_cases": null,
+  "testing_considerations": null,
   "meta_data": {
-    "llm_usage": {
-      "total_tokens": 26127,
-      "prompt_tokens": 20946,
-      "completion_tokens": 5181,
-      "api_calls": 35,
-      "estimated_cost": 0.26127,
-      "models_used": {
-        "gpt-4": 26127
-      }
-    },
+    "llm_usage": null,
     "semantic_analysis": null,
-    "relationship_analysis": {
-      "parent_child": [
-        {
-          "parent": "config",
-          "child": "init"
-        },
-        {
-          "parent": "config",
-          "child": "show"
-        },
-        {
-          "parent": "analyze",
-          "child": "tool"
-        },
-        {
-          "parent": "execute",
-          "child": "plan"
-        },
-        {
-          "parent": "verify",
-          "child": "results"
-        },
-        {
-          "parent": "db",
-          "child": "list-db"
-        },
-        {
-          "parent": "db",
-          "child": "get-db"
-        },
-        {
-          "parent": "db",
-          "child": "reset"
-        },
-        {
-          "parent": "db",
-          "child": "info"
-        },
-        {
-          "parent": "db",
-          "child": "browser"
-        },
-        {
-          "parent": "db",
-          "child": "migrate"
-        }
-      ],
-      "workflows": [
-        {
-          "name": "Setup workflow",
-          "steps": [
-            "config:init",
-            "config:show",
-            "db:migrate"
-          ]
-        },
-        {
-          "name": "Test workflow",
-          "steps": [
-            "analyze:tool",
-            "execute:plan",
-            "verify:results"
-          ]
-        },
-        {
-          "name": "Database management workflow",
-          "steps": [
-            "db:reset",
-            "db:info",
-            "db:list-db",
-            "db:get-db",
-            "db:browser"
-          ]
-        }
-      ],
-      "dependencies": [
-        {
-          "command": "config:show",
-          "depends_on": "config:init"
-        },
-        {
-          "command": "db:migrate",
-          "depends_on": "config:init"
-        },
-        {
-          "command": "analyze:tool",
-          "depends_on": "config:init"
-        },
-        {
-          "command": "execute:plan",
-          "depends_on": "analyze:tool"
-        },
-        {
-          "command": "verify:results",
-          "depends_on": "execute:plan"
-        },
-        {
-          "command": "db:list-db",
-          "depends_on": "db:reset"
-        },
-        {
-          "command": "db:get-db",
-          "depends_on": "db:list-db"
-        },
-        {
-          "command": "db:browser",
-          "depends_on": "db:get-db"
-        }
-      ]
-    },
+    "relationship_analysis": null,
     "user_preferences": null,
     "analysis_timestamp": null
   }
