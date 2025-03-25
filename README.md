@@ -191,7 +191,7 @@ We provide several scripts to test workflows locally before pushing:
 ```
 
 ### Key Features
-- Matrix testing across Python 3.10, 3.11, 3.12, and 3.13
+- Testing on Python 3.13 for faster workflows
 - Fast dependency management with astral-sh/setup-uv@v5
 - Comprehensive security scanning
 - Automated documentation generation and publishing
