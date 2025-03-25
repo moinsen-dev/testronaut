@@ -25,6 +25,7 @@ Phase 002 of the Testronaut project focused on implementing robust CI/CD (Contin
   - Uses Python 3.13 for consistency
   - Caches dependencies for faster runs
   - Generates API documentation from code comments
+  - Includes all required MkDocs plugins (material, autorefs, mkdocstrings)
 
 ### Release Workflow (`release.yml`)
 - **Purpose**: Create releases and publish packages to PyPI
