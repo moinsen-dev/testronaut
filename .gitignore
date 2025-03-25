@@ -87,3 +87,5 @@ dmypy.json
 # Jupyter Notebooks (for prototyping)
 .ipynb_checkpoints
 *.ipynb
+
+testronaut_analysis/

@@ -11,20 +11,25 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, NoReturn, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
+import structlog
 import typer
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.tree import Tree
 
 from testronaut import __version__
 from testronaut.config import Settings, get_config_path, initialize_config, update_config
 from testronaut.factory import registry
+from testronaut.models.base import create_db_and_tables
+from testronaut.repositories.cli_tool import CLIToolRepository
 from testronaut.utils.errors import CommandExecutionError, ValidationError
 from testronaut.utils.llm import LLMService
 from testronaut.utils.logging import configure_logging, get_logger
+from testronaut.utils.text_utils import clean_help_text
 
 # Initialize console and logger
 console = Console()
@@ -179,6 +184,9 @@ def analyze_tool(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show detailed progress logs during analysis"
     ),
+    save_to_db: bool = typer.Option(
+        False, "--save-to-db", "-s", help="Save analysis results to database"
+    ),
 ):
     """Analyze a CLI tool and generate a test plan."""
     console.print(f"Analyzing tool: [bold]{tool_path}[/bold]")
@@ -192,6 +200,11 @@ def analyze_tool(
         # Create output directory if it doesn't exist
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
+
+        # Initialize database if saving to DB
+        if save_to_db:
+            logger.debug("Initializing database")
+            create_db_and_tables()
 
         # Get the analyzer factory
         analyzer_factory = registry.get_factory("cli_analyzer")
@@ -234,10 +247,22 @@ def analyze_tool(
             # Convert model to dictionary
             tool_dict = cli_tool.dict(exclude={"id"})
 
+            # Clean up help text for more compact and readable output
+            if "help_text" in tool_dict and tool_dict["help_text"]:
+                cleaned_text = clean_help_text(tool_dict["help_text"])
+                if cleaned_text is not None:
+                    tool_dict["help_text"] = cleaned_text
+
             # Add commands as a top-level list
             commands_list = []
             for cmd in cli_tool.commands:
                 cmd_dict = cmd.dict(exclude={"cli_tool", "cli_tool_id"})
+
+                # Clean command help text
+                if "help_text" in cmd_dict and cmd_dict["help_text"]:
+                    cleaned_text = clean_help_text(cmd_dict["help_text"])
+                    if cleaned_text is not None:
+                        cmd_dict["help_text"] = cleaned_text
 
                 # Process options
                 options_list = []
@@ -279,6 +304,7 @@ def analyze_tool(
             progress.update(task, description="Analysis complete!", completed=True)
 
         # Export semantic analysis for LLM-enhanced analyzer
+        semantic_analysis = None
         if enhanced or deep:
             # Create semantic analysis directory
             semantic_path = output_path / "semantic"
@@ -300,12 +326,38 @@ def analyze_tool(
                         with open(semantic_file, "w") as f:
                             json.dump(semantic_analysis[cmd.id], f, indent=2)
 
+        # Save to database if requested
+        if save_to_db:
+            progress = console.status(
+                "[bold blue]Saving analysis results to database...[/bold blue]"
+            )
+            progress.start()
+
+            try:
+                # Create a repository
+                repository = CLIToolRepository()
+
+                # Save the analysis results
+                repository.save_analysis_results(cli_tool, semantic_analysis)
+
+                progress.stop()
+                console.print("[bold green]Analysis results saved to database.[/bold green]")
+            except Exception as db_error:
+                progress.stop()
+                console.print(f"[bold red]Error saving to database:[/bold red] {str(db_error)}")
+                if verbose:
+                    import traceback
+
+                    console.print(f"[red]{traceback.format_exc()}[/red]")
+                logger.exception(f"Failed to save to database: {str(db_error)}")
+
         # Report findings
         console.print(
             Panel.fit(
                 f"[bold green]Analysis of {tool_name} completed![/bold green]\n"
                 f"Found {len(cli_tool.commands)} top-level commands.\n"
                 f"Results saved to: {output_file}"
+                + ("\nResults saved to database." if save_to_db else "")
             )
         )
 
@@ -317,6 +369,49 @@ def analyze_tool(
 
             console.print(f"[red]{traceback.format_exc()}[/red]")
         logger.exception(f"Failed to analyze tool: {str(e)}")
+        return 1
+
+
+@analyze_app.command("list-db")
+def list_analyzed_tools():
+    """List CLI tools that have been analyzed and stored in the database."""
+    try:
+        # Initialize database
+        create_db_and_tables()
+
+        # Create repository
+        repository = CLIToolRepository()
+
+        # Get all tools
+        tools = repository.list()
+
+        if not tools:
+            console.print("[yellow]No analyzed tools found in the database.[/yellow]")
+            return 0
+
+        # Create a table to display tool information
+        from rich.table import Table
+
+        table = Table(title="Analyzed CLI Tools")
+        table.add_column("Tool Name", style="cyan")
+        table.add_column("Version", style="green")
+        table.add_column("Commands", style="blue")
+        table.add_column("Analyzed At", style="magenta")
+
+        for tool in tools:
+            table.add_row(
+                tool.name,
+                tool.version or "Unknown",
+                str(len(tool.commands)),
+                tool.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+
+        console.print(table)
+        return 0
+
+    except Exception as e:
+        console.print(f"[bold red]Error listing tools:[/bold red] {str(e)}")
+        logger.exception(f"Error listing tools: {str(e)}")
         return 1
 
 
@@ -385,6 +480,73 @@ def test_llm():
     except Exception as e:
         console.print(f"[bold red]Error testing LLM service:[/bold red] {str(e)}")
         logger.exception(f"Error testing LLM service: {str(e)}")
+        return 1
+
+
+@analyze_app.command("get-db")
+def get_analyzed_tool(
+    tool_name: str = typer.Argument(..., help="Name of the CLI tool to retrieve"),
+):
+    """Retrieve a specific CLI tool from the database and display its details."""
+    try:
+        # Initialize database
+        create_db_and_tables()
+
+        # Create console for output
+        console = Console()
+
+        # Create repository and get tool
+        repo = CLIToolRepository()
+        tool = repo.get_by_name(tool_name)
+
+        if not tool:
+            console.print(f"[yellow]Tool '{tool_name}' not found in the database.[/yellow]")
+            return 1
+
+        console.print(f"[bold green]CLI Tool:[/bold green] {tool.name}")
+        console.print(f"[bold green]Version:[/bold green] {tool.version}")
+        console.print(f"[bold green]Analyzed At:[/bold green] {tool.created_at}")
+        console.print(f"[bold green]Total Commands:[/bold green] {len(tool.commands)}")
+        console.print()
+
+        # Build a rich tree to display the commands
+        root = Tree(f"[bold blue]{tool.name}[/bold blue]")
+
+        # Function to recursively add commands to the tree
+        def add_commands_to_tree(commands, parent_node):
+            for cmd in commands:
+                # Create a node for the command
+                cmd_node = parent_node.add(
+                    f"[bold cyan]{cmd.name}[/bold cyan]: {cmd.description or ''}"
+                )
+
+                # Add options if any
+                if cmd.options:
+                    options_node = cmd_node.add("[bold yellow]Options:[/bold yellow]")
+                    for opt in cmd.options:
+                        options_node.add(f"{opt.name}: {opt.description or ''}")
+
+                # Add arguments if any
+                if cmd.arguments:
+                    args_node = cmd_node.add("[bold magenta]Arguments:[/bold magenta]")
+                    for arg in cmd.arguments:
+                        args_node.add(f"{arg.name}: {arg.description or ''}")
+
+                # Recursively add subcommands
+                if cmd.subcommands:
+                    add_commands_to_tree(cmd.subcommands, cmd_node)
+
+        # Add top-level commands to the tree
+        add_commands_to_tree(tool.commands, root)
+
+        # Display the tree
+        console.print(root)
+
+        return 0
+    except Exception as e:
+        console = Console()
+        console.print(f"[bold red]Error retrieving tool:[/bold red] {str(e)}")
+        logger.exception(f"Error retrieving tool: {str(e)}")
         return 1
 
 

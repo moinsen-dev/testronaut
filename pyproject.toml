@@ -25,6 +25,7 @@ dependencies = [
     "alembic>=1.15.1",
     "structlog>=25.2.0",
     "pyyaml>=6.0.2",
+    "textual>=2.1.2",
 ]
 
 [project.optional-dependencies]

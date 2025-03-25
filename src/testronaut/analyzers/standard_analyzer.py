@@ -628,10 +628,10 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             CommandExecutionError: If the tool cannot be executed.
             ValidationError: If the tool information cannot be validated.
         """
-        logger.info(f"Analyzing CLI tool: {tool_name}")
+        logger.debug(f"Analyzing CLI tool: {tool_name}")
 
         # Check if tool is installed
-        logger.info(f"Step 1/7: Verifying installation of {tool_name}...")
+        logger.debug(f"Step 1/7: Verifying installation of {tool_name}...")
         if not self.verify_tool_installation(tool_name):
             raise CommandExecutionError(
                 f"CLI tool {tool_name} is not installed or not found in PATH",
@@ -639,14 +639,14 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             )
 
         # Get tool help text
-        logger.info(f"Step 2/7: Retrieving main help text for {tool_name}...")
+        logger.debug(f"Step 2/7: Retrieving main help text for {tool_name}...")
         help_text = self.get_tool_help_text(tool_name)
 
         # Get tool version if not provided
         if not version:
-            logger.info(f"Step 3/7: Detecting version of {tool_name}...")
+            logger.debug(f"Step 3/7: Detecting version of {tool_name}...")
             version = self.get_tool_version(tool_name)
-            logger.info(f"Detected version: {version or 'unknown'}")
+            logger.debug(f"Detected version: {version or 'unknown'}")
 
         # Create CLI tool model
         cli_tool = CLITool(name=tool_name, version=version, help_text=help_text)
@@ -659,9 +659,9 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             cli_tool.description = desc_match.group(1).strip()
 
         # Phase 1: Extract and discover all commands (discovery phase)
-        logger.info(f"Step 4/7: Extracting top-level commands for {tool_name}...")
+        logger.debug(f"Step 4/7: Extracting top-level commands for {tool_name}...")
         commands_data = self.extract_commands(tool_name, help_text)
-        logger.info(f"Found {len(commands_data)} top-level commands")
+        logger.debug(f"Found {len(commands_data)} top-level commands")
 
         # Create command models for top-level commands
         for cmd_data in commands_data:
@@ -673,7 +673,7 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             cli_tool.commands.append(command)
 
         # Phase 1.5: Build command tree structure and count total commands
-        logger.info("Step 5/7: Building command tree structure...")
+        logger.debug("Step 5/7: Building command tree structure...")
         # A set to track discovered command IDs and prevent cycles
         discovered_cmds: Set[str] = set()
 
@@ -768,20 +768,20 @@ class StandardCLIAnalyzer(CLIAnalyzer):
 
         # Count total commands for accurate progress reporting
         total_commands = len(cli_tool.commands)
-        logger.info(f"Discovered {total_commands} total commands in command tree")
+        logger.debug(f"Discovered {total_commands} total commands in command tree")
 
         # Phase 2: Analyze each command with detailed information
-        logger.info("Step 6/7: Analyzing detailed command information...")
+        logger.debug("Step 6/7: Analyzing detailed command information...")
         processed_commands: Set[str] = set()  # Track processed commands to prevent cycles
 
         for i, command in enumerate(cli_tool.commands):
-            logger.info(
+            logger.debug(
                 f"Analyzing command {i + 1}/{total_commands}: {getattr(command, 'name', 'unknown')}"
             )
             self.update_command_info(command, processed_commands)
 
         # Clean up duplicate commands with different capitalization
-        logger.info("Step 7/7: Cleaning up and finalizing analysis...")
+        logger.debug("Step 7/7: Cleaning up and finalizing analysis...")
         self._clean_up_duplicate_commands(cli_tool)
 
         # Count total commands including subcommands
@@ -793,7 +793,7 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             else:
                 subcommand_count += 1
 
-        logger.info(
+        logger.debug(
             f"Analysis complete! Found {top_level_count} top-level commands and {subcommand_count} subcommands"
         )
         return cli_tool
