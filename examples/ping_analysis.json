@@ -1,0 +1,28 @@
+{
+  "name": "ping",
+  "version": null,
+  "help_text": "",
+  "id": "338c8d0f-b292-4496-9b0c-6140f519bf2e",
+  "created_at": "2025-03-25T09:24:30.384520",
+  "updated_at": null,
+  "install_command": null,
+  "description": null,
+  "purpose": "",
+  "background": "",
+  "use_cases": null,
+  "testing_considerations": null,
+  "meta_data": {
+    "llm_usage": {
+      "total_tokens": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "api_calls": 0,
+      "estimated_cost": 0.0,
+      "models_used": {}
+    },
+    "semantic_analysis": null,
+    "relationship_analysis": null,
+    "user_preferences": null,
+    "analysis_timestamp": null
+  }
+}

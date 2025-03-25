@@ -98,7 +98,7 @@ class LLMSettings(BaseSettings):
     """LLM provider configuration settings."""
 
     provider: str = Field(default="openai", description="The LLM provider to use")
-    model: str = Field(default="gpt-4o", description="The model to use for the LLM provider")
+    model: str = Field(default="gpt-4", description="The model to use for the LLM provider")
     temperature: float = Field(default=0.7, description="The sampling temperature for the LLM")
     max_tokens: int = Field(default=1000, description="The maximum number of tokens to generate")
     provider_settings: Dict[str, Dict[str, Any]] = Field(
@@ -108,9 +108,9 @@ class LLMSettings(BaseSettings):
                 "organization": None,
                 "base_url": None,
                 "models": {
-                    "default": "gpt-4o",
-                    "chat": "gpt-4o",
-                    "json": "gpt-4o",
+                    "default": "gpt-4",
+                    "chat": "gpt-4",
+                    "json": "gpt-4",
                     "embedding": "text-embedding-3-small",
                 },
             },
