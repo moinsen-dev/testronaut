@@ -3,8 +3,7 @@ CLI Analyzer Interface.
 
 This module defines the interface for analyzing CLI tools and commands.
 """
-from typing import List, Dict, Any, Optional, Protocol, runtime_checkable
-from pathlib import Path
+from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
 from testronaut.models import CLITool, Command
 

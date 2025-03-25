@@ -3,15 +3,14 @@ Docker Integration Utilities.
 
 This module provides utilities for managing Docker containers for test isolation.
 """
-import os
 import json
-import uuid
 import tempfile
+import uuid
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any, Set, Tuple
+from typing import Any, Dict, List, Optional, Union
 
 from testronaut.utils.command import CommandRunner
-from testronaut.utils.errors import DockerError, ConfigurationError
+from testronaut.utils.errors import DockerError
 from testronaut.utils.logging import get_logger
 
 # Initialize logger

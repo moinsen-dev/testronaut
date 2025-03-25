@@ -9,12 +9,7 @@ __version__ = "0.1.0"
 __author__ = "Testronaut Team"
 
 # Import key components
-from testronaut.config import (
-    Settings,
-    initialize_config,
-    update_config,
-    get_config_path
-)
+from testronaut.config import Settings, get_config_path, initialize_config, update_config
 
 # Export public interface
 __all__ = [

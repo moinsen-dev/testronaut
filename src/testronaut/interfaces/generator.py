@@ -3,9 +3,9 @@ Test Generator Interface.
 
 This module defines the interface for generating test plans and test cases.
 """
-from typing import List, Dict, Any, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
-from testronaut.models import CLITool, Command, TestPlan, TestCase
+from testronaut.models import CLITool, Command, TestCase, TestPlan
 
 
 @runtime_checkable

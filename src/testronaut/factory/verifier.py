@@ -3,10 +3,10 @@ Result Verifier Factory.
 
 This module provides a factory for creating result verifier components.
 """
-from typing import Dict, Any, Type, Optional
+from typing import Dict, Type
 
-from testronaut.interfaces import ResultVerifier
 from testronaut.factory import Factory, registry
+from testronaut.interfaces import ResultVerifier
 from testronaut.utils.errors import ConfigurationError
 
 

@@ -3,6 +3,7 @@ Data models for CLI tool information.
 """
 
 from typing import Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 

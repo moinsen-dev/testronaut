@@ -3,10 +3,10 @@ LLM Manager Factory.
 
 This module provides a factory for creating LLM manager components.
 """
-from typing import Dict, Any, Type, Optional
+from typing import Dict, Type
 
-from testronaut.interfaces import LLMManager
 from testronaut.factory import Factory, registry
+from testronaut.interfaces import LLMManager
 from testronaut.utils.errors import ConfigurationError
 
 

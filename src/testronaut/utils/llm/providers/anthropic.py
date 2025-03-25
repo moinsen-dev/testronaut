@@ -4,13 +4,13 @@ Anthropic LLM Provider for Claude.
 This module provides an implementation of the LLM provider interface
 for the Anthropic Claude API.
 """
-import os
 import json
-from typing import Dict, List, Any, Optional, Union
+import os
+from typing import Any, Dict, List, Optional
 
 from testronaut.utils.errors import LLMServiceError
-from testronaut.utils.logging import get_logger
 from testronaut.utils.llm import LLMProviderRegistry
+from testronaut.utils.logging import get_logger
 
 # Initialize logger
 logger = get_logger(__name__)

@@ -6,12 +6,10 @@ It uses a combination of parsing help text and LLM-based analysis to understand
 the CLI tool's capabilities.
 """
 
-import subprocess
-import json
 import logging
 import re
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+import subprocess
+from typing import Any, Dict, Optional
 
 from testronaut.core.models import CliTool, Command, CommandParameter
 

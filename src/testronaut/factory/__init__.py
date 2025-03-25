@@ -3,8 +3,8 @@ Component Factory System.
 
 This module provides a factory system for creating and managing component instances.
 """
-from typing import Dict, Any, Type, TypeVar, Generic, Optional
 from abc import ABC, abstractmethod
+from typing import Any, Dict, Generic, Optional, Type, TypeVar
 
 # Type variable for the component type produced by the factory
 T = TypeVar('T')
@@ -99,10 +99,10 @@ registry = FactoryRegistry()
 
 # Import and register component factories
 from testronaut.factory.analyzer import analyzer_factory
-from testronaut.factory.generator import generator_factory
 from testronaut.factory.executor import executor_factory
-from testronaut.factory.verifier import verifier_factory
+from testronaut.factory.generator import generator_factory
 from testronaut.factory.llm import llm_factory
+from testronaut.factory.verifier import verifier_factory
 
 __all__ = [
     'Factory',

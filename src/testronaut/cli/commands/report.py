@@ -2,9 +2,10 @@
 Command module for generating test reports.
 """
 
-import typer
 from pathlib import Path
 from typing import Optional
+
+import typer
 from rich.console import Console
 
 console = Console()

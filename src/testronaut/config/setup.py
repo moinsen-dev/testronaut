@@ -6,7 +6,7 @@ This module provides utilities for setting up and initializing configuration.
 import os
 import shutil
 from pathlib import Path
-from typing import Optional, Union, Dict, Any
+from typing import Any, Dict, Optional, Union
 
 from testronaut.config import Settings, save_config_file, settings
 
