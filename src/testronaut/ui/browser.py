@@ -22,9 +22,8 @@ from testronaut.models.base import engine
 from testronaut.models.cli_tool import Argument, CLITool, Command, Example, Option
 from testronaut.ui.repository import DBBrowserRepository
 
-# Disable sqlalchemy and other logs that might interfere with the TUI
-logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
-logging.getLogger("testronaut").setLevel(logging.WARNING)
+# Disable other logs that might interfere with the TUI
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Custom logger for the UI that won't output to console
 ui_logger = logging.getLogger("testronaut.ui")

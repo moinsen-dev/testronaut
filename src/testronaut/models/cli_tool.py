@@ -6,7 +6,8 @@ This module defines the data models for CLI tools, commands, options, and argume
 
 from typing import Any, Dict, ForwardRef, List, Optional
 
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import JSON
+from sqlmodel import Column, Field, Relationship, SQLModel
 
 from testronaut.models.base import BaseModel
 
@@ -25,6 +26,16 @@ class CLITool(BaseModel, table=True):
     install_command: Optional[str] = Field(default=None)
     help_text: Optional[str] = Field(default=None)
     description: Optional[str] = Field(default=None)
+    purpose: Optional[str] = Field(default=None, description="Detailed purpose of the tool")
+    background: Optional[str] = Field(
+        default=None, description="Background information for testing"
+    )
+    use_cases: Optional[str] = Field(
+        default=None, sa_column=Column(JSON), description="Common use cases (stored as JSON)"
+    )
+    testing_considerations: Optional[str] = Field(
+        default=None, sa_column=Column(JSON), description="Testing considerations (stored as JSON)"
+    )
 
     # Relationships
     commands: List[CommandRef] = Relationship(
@@ -38,6 +49,7 @@ class Command(BaseModel, table=True):
     cli_tool_id: str = Field(foreign_key="clitool.id", index=True)
     name: str = Field(index=True)
     description: Optional[str] = Field(default=None)
+    purpose: Optional[str] = Field(default=None, description="Specific purpose of this command")
     syntax: Optional[str] = Field(default=None)
     help_text: Optional[str] = Field(default=None)
     is_subcommand: bool = Field(default=False)

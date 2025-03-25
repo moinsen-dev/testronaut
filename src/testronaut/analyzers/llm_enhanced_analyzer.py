@@ -564,6 +564,169 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
                     details={"error": str(llm_error), "original_error": str(e)},
                 )
 
+    def _analyze_tool_purpose(self, cli_tool: CLITool) -> Dict[str, Any]:
+        """
+        Analyze the overall purpose of a CLI tool using LLM.
+
+        Args:
+            cli_tool: The CLI tool to analyze.
+
+        Returns:
+            Dictionary with purpose analysis information.
+        """
+        if not cli_tool.help_text:
+            return {}
+
+        prompt = CLIAnalysisPrompts.tool_purpose_analysis(cli_tool.name, cli_tool.help_text)
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "purpose": {
+                    "type": "string",
+                    "description": "The main purpose of the tool",
+                },
+                "background": {
+                    "type": "string",
+                    "description": "Technical context for understanding the tool",
+                },
+                "use_cases": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Common use cases for the tool",
+                },
+                "testing_considerations": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Special considerations for testing",
+                },
+            },
+            "required": ["purpose"],
+        }
+
+        try:
+            # Try to get structured JSON analysis
+            analysis = self.llm_service.generate_json(prompt, schema)
+            logger.debug(f"Generated purpose analysis for tool: {cli_tool.name}")
+            return cast(Dict[str, Any], analysis)
+        except LLMServiceError:
+            # Fall back to text generation and processing
+            try:
+                response = self.llm_service.generate_text(prompt)
+                analysis = self.result_processor.process_tool_purpose_analysis(response)
+                return analysis
+            except (LLMServiceError, ValidationError) as e:
+                logger.warning(f"Failed to analyze tool purpose: {str(e)}")
+                return {}
+
+    def _analyze_subcommand_purpose(self, command: Command) -> str:
+        """
+        Analyze the purpose of a specific subcommand using LLM.
+
+        Args:
+            command: The command to analyze.
+
+        Returns:
+            String with the command's purpose.
+        """
+        if not command.help_text or not command.cli_tool:
+            return ""
+
+        prompt = CLIAnalysisPrompts.subcommand_purpose_analysis(
+            command.cli_tool.name, command.name, command.help_text
+        )
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "purpose": {
+                    "type": "string",
+                    "description": "The specific purpose of this command",
+                },
+            },
+            "required": ["purpose"],
+        }
+
+        try:
+            analysis = self.llm_service.generate_json(prompt, schema)
+            logger.debug(f"Generated purpose analysis for command: {command.name}")
+            return cast(Dict[str, Any], analysis).get("purpose", "")
+        except LLMServiceError:
+            # Fall back to text generation
+            try:
+                response = self.llm_service.generate_text(prompt)
+                # Extract purpose from text response
+                return self.result_processor.extract_purpose(response)
+            except (LLMServiceError, ValidationError) as e:
+                logger.warning(f"Failed to analyze command purpose: {str(e)}")
+                return ""
+
+    def _verify_and_complete_command(self, command: Command) -> None:
+        """
+        Verify that a command has complete information and use LLM to fill gaps.
+
+        Args:
+            command: The command to verify and complete.
+        """
+        # Check if options are missing but likely needed
+        if not command.options and "option" in (command.help_text or "").lower():
+            logger.info(f"Generating missing options for command: {command.name}")
+            try:
+                cmd_data = self._extract_command_structure_with_llm(
+                    command.cli_tool.name, command.name, command.help_text or ""
+                )
+                if "options" in cmd_data and isinstance(cmd_data["options"], list):
+                    for opt_data in cmd_data["options"]:
+                        option = Option(
+                            command_id=command.id,
+                            name=opt_data.get("name", ""),
+                            description=opt_data.get("description"),
+                            short_form=opt_data.get("short_form"),
+                            long_form=opt_data.get("long_form"),
+                            required=opt_data.get("required", False),
+                        )
+                        command.options.append(option)
+            except Exception as e:
+                logger.warning(f"Failed to generate options for {command.name}: {str(e)}")
+
+        # Check if arguments are missing but likely needed
+        if not command.arguments and "argument" in (command.help_text or "").lower():
+            logger.info(f"Generating missing arguments for command: {command.name}")
+            try:
+                cmd_data = self._extract_command_structure_with_llm(
+                    command.cli_tool.name, command.name, command.help_text or ""
+                )
+                if "arguments" in cmd_data and isinstance(cmd_data["arguments"], list):
+                    for i, arg_data in enumerate(cmd_data["arguments"]):
+                        argument = Argument(
+                            command_id=command.id,
+                            name=arg_data.get("name", ""),
+                            description=arg_data.get("description"),
+                            required=arg_data.get("required", False),
+                            position=i,
+                        )
+                        command.arguments.append(argument)
+            except Exception as e:
+                logger.warning(f"Failed to generate arguments for {command.name}: {str(e)}")
+
+        # Check if examples are missing
+        if not command.examples:
+            logger.info(f"Generating examples for command: {command.name}")
+            try:
+                examples = self.extract_examples(command)
+                if examples:
+                    for example in examples:
+                        cmd_line = example.get("command_line", "")
+                        desc = example.get("description", "")
+                        if cmd_line:
+                            command.examples.append(
+                                Example(
+                                    command_id=command.id, command_line=cmd_line, description=desc
+                                )
+                            )
+            except Exception as e:
+                logger.warning(f"Failed to generate examples for {command.name}: {str(e)}")
+
     def analyze_cli_tool(self, tool_name: str, version: Optional[str] = None) -> CLITool:
         """
         Analyze a CLI tool and extract its commands, options, and arguments with LLM enhancement.
@@ -580,7 +743,7 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
             ValidationError: If the tool information cannot be validated.
         """
         logger.info(f"Starting LLM-enhanced analysis of CLI tool: {tool_name}")
-        logger.info("Phase 1/3: Running standard analysis...")
+        logger.info("Phase 1/4: Running standard analysis...")
 
         # First analyze with standard analyzer
         start_time = time.time()
@@ -589,7 +752,7 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
         logger.info(f"Standard analysis completed in {standard_time:.2f} seconds")
 
         try:
-            logger.info("Phase 2/3: Enhancing analysis with LLM...")
+            logger.info("Phase 2/4: Enhancing analysis with LLM...")
 
             # Enhance tool description with LLM
             if cli_tool.help_text:
@@ -602,6 +765,18 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
                     f"Description enhancement completed in {time.time() - start_time:.2f} seconds"
                 )
 
+            # NEW: Analyze tool purpose and background
+            logger.info("Analyzing tool purpose and background...")
+            start_time = time.time()
+            purpose_analysis = self._analyze_tool_purpose(cli_tool)
+            cli_tool.purpose = purpose_analysis.get("purpose", "")
+            cli_tool.background = purpose_analysis.get("background", "")
+            cli_tool.use_cases = purpose_analysis.get("use_cases", [])
+            cli_tool.testing_considerations = purpose_analysis.get("testing_considerations", [])
+            logger.info(
+                f"Tool purpose analysis completed in {time.time() - start_time:.2f} seconds"
+            )
+
             # If we don't have any commands detected but we have help text,
             # try to extract commands using LLM
             if not cli_tool.commands and cli_tool.help_text:
@@ -612,9 +787,24 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
                     f"Command extraction completed in {time.time() - start_time:.2f} seconds"
                 )
 
+            # NEW: Phase 3/4: Enhance commands with purposes and missing details
+            if cli_tool.commands:
+                logger.info("Phase 3/4: Enhancing commands with purposes and details...")
+                start_time = time.time()
+                for command in cli_tool.commands:
+                    logger.info(f"Analyzing purpose for command: {command.name}")
+                    command.purpose = self._analyze_subcommand_purpose(command)
+
+                    # Verify and complete command details
+                    self._verify_and_complete_command(command)
+
+                logger.info(
+                    f"Command enhancement completed in {time.time() - start_time:.2f} seconds"
+                )
+
             # Analyze command relationships and add as metadata
             if cli_tool.commands:
-                logger.info("Phase 3/3: Analyzing command relationships...")
+                logger.info("Phase 4/4: Analyzing command relationships...")
                 start_time = time.time()
                 relationships = self._analyze_command_relationships(cli_tool)
                 if relationships:

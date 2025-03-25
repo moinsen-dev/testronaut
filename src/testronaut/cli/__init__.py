@@ -74,6 +74,7 @@ def main(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     log_file: Optional[str] = typer.Option(None, "--log-file", help="Log to file"),
+    sql_debug: bool = typer.Option(False, "--sql-debug", help="Enable detailed SQL query logging"),
 ):
     """
     Testronaut: Automated CLI Testing Framework.
@@ -84,6 +85,11 @@ def main(
     # Configure logging
     log_level = "DEBUG" if verbose else "INFO"
     configure_logging(level=log_level, log_file=log_file)
+
+    # Configure SQL logging if requested
+    from testronaut.models.base import configure_sql_logging
+
+    configure_sql_logging(debug=sql_debug)
 
 
 @config_app.command("init")
@@ -192,16 +198,27 @@ def analyze_tool(
     save_to_db: bool = typer.Option(
         False, "--save-to-db", "-s", help="Save analysis results to database"
     ),
+    sql_debug: bool = typer.Option(False, "--sql-debug", help="Enable detailed SQL query logging"),
 ):
     """Analyze a CLI tool and generate a test plan."""
     console.print(f"Analyzing tool: [bold]{tool_path}[/bold]")
 
     # Configure verbose logging if requested
     if verbose:
-        configure_logging(level="DEBUG")
+        logger.setLevel(logging.DEBUG)
         logger.debug("Verbose logging enabled")
 
+    # Configure SQL logging if requested
+    if sql_debug:
+        from testronaut.models.base import configure_sql_logging
+
+        configure_sql_logging(debug=True)
+        logger.debug("SQL debugging enabled")
+
     try:
+        # Get the CLI module and import the analyze_tool function
+        from testronaut.cli.analyze import analyze_tool as run_analysis
+
         # Create output directory if it doesn't exist
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -240,70 +257,15 @@ def analyze_tool(
             # Start a task
             task = progress.add_task(f"Analyzing {tool_name}...", total=None)
 
-            # Run the analysis
-            cli_tool = analyzer.analyze_cli_tool(tool_path)
-
-            # Update task for export phase
-            progress.update(task, description="Exporting analysis results...")
-
-            # Save analysis results to JSON file
-            output_file = output_path / f"{tool_name}_analysis.json"
-
-            # Convert model to dictionary
-            tool_dict = cli_tool.dict(exclude={"id"})
-
-            # Clean up help text for more compact and readable output
-            if "help_text" in tool_dict and tool_dict["help_text"]:
-                cleaned_text = clean_help_text(tool_dict["help_text"])
-                if cleaned_text is not None:
-                    tool_dict["help_text"] = cleaned_text
-
-            # Add commands as a top-level list
-            commands_list = []
-            for cmd in cli_tool.commands:
-                cmd_dict = cmd.dict(exclude={"cli_tool", "cli_tool_id"})
-
-                # Clean command help text
-                if "help_text" in cmd_dict and cmd_dict["help_text"]:
-                    cleaned_text = clean_help_text(cmd_dict["help_text"])
-                    if cleaned_text is not None:
-                        cmd_dict["help_text"] = cleaned_text
-
-                # Process options
-                options_list = []
-                for opt in cmd.options:
-                    opt_dict = opt.dict(exclude={"command", "command_id"})
-                    options_list.append(opt_dict)
-                cmd_dict["options"] = options_list
-
-                # Process arguments
-                args_list = []
-                for arg in cmd.arguments:
-                    arg_dict = arg.dict(exclude={"command", "command_id"})
-                    args_list.append(arg_dict)
-                cmd_dict["arguments"] = args_list
-
-                # Process examples
-                examples_list = []
-                for ex in cmd.examples:
-                    ex_dict = ex.dict(exclude={"command", "command_id"})
-                    examples_list.append(ex_dict)
-                cmd_dict["examples"] = examples_list
-
-                commands_list.append(cmd_dict)
-
-            tool_dict["commands"] = commands_list
-
-            # Write to file
-            with open(output_file, "w") as f:
-                # Create a custom JSON encoder to handle datetime objects
-                class DateTimeEncoder(json.JSONEncoder):
-                    def default(self, obj):
-                        if isinstance(obj, datetime):
-                            return obj.isoformat()
-                        return super().default(obj)
-
-                json.dump(tool_dict, f, indent=2, cls=DateTimeEncoder)
+            # Call the analyze_tool function from the CLI module
+            run_analysis(
+                tool_path=tool_path,
+                output=output_path,
+                deep=deep,
+                enhanced=enhanced,
+                verbose=verbose,
+                sql_debug=sql_debug,
+            )
 
             # Complete the task
             progress.update(task, description="Analysis complete!", completed=True)
@@ -316,16 +278,16 @@ def analyze_tool(
             semantic_path.mkdir(exist_ok=True)
 
             # Save semantic analysis for each command
-            if hasattr(cli_tool, "metadata") and getattr(cli_tool, "metadata", {}).get(
+            if hasattr(analyzer, "metadata") and getattr(analyzer, "metadata", {}).get(
                 "semantic_analysis"
             ):
                 console.print("\nExporting semantic analysis...")
 
                 # Extract semantic analysis
-                semantic_analysis = cli_tool.metadata["semantic_analysis"]
+                semantic_analysis = analyzer.metadata["semantic_analysis"]
 
                 # Save for each command
-                for cmd in cli_tool.commands:
+                for cmd in analyzer.commands:
                     if cmd.id in semantic_analysis:
                         semantic_file = semantic_path / f"{cmd.name}.json"
                         with open(semantic_file, "w") as f:
@@ -343,7 +305,7 @@ def analyze_tool(
                 repository = CLIToolRepository()
 
                 # Save the analysis results
-                repository.save_analysis_results(cli_tool, semantic_analysis)
+                repository.save_analysis_results(analyzer, semantic_analysis)
 
                 progress.stop()
                 console.print("[bold green]Analysis results saved to database.[/bold green]")
@@ -360,8 +322,8 @@ def analyze_tool(
         console.print(
             Panel.fit(
                 f"[bold green]Analysis of {tool_name} completed![/bold green]\n"
-                f"Found {len(cli_tool.commands)} top-level commands.\n"
-                f"Results saved to: {output_file}"
+                f"Found {len(analyzer.commands)} top-level commands.\n"
+                f"Results saved to: {output_path}"
                 + ("\nResults saved to database." if save_to_db else "")
             )
         )
@@ -571,6 +533,7 @@ def browser(
     ),
     quiet: bool = typer.Option(True, "--quiet/--no-quiet", "-q", help="Silence all logging output"),
     debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug logging"),
+    sql_debug: bool = typer.Option(False, "--sql-debug", help="Enable detailed SQL query logging"),
 ) -> None:
     """
     Launch an interactive database browser for exploring analyzed CLI tools.
@@ -585,14 +548,15 @@ def browser(
             console.print("Debug mode enabled. Some log messages will be shown.")
             # Only adjust root logger if debug is enabled
             logging.getLogger().setLevel(logging.INFO)
-            # Always set SQLAlchemy to WARNING to avoid overwhelming output
-            logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+
             # Set testronaut logger to DEBUG for detailed info
             testronaut_logger = logging.getLogger("testronaut")
             testronaut_logger.setLevel(logging.DEBUG)
+
             # Specifically set the UI logger to DEBUG
             ui_logger = logging.getLogger("testronaut.ui")
             ui_logger.setLevel(logging.DEBUG)
+
             # Add a console handler for direct output during debugging
             console_handler = logging.StreamHandler()
             console_handler.setFormatter(
@@ -603,8 +567,12 @@ def browser(
         elif quiet:
             # In quiet mode, suppress all logging
             logging.getLogger().setLevel(logging.ERROR)
-            logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
             logging.getLogger("testronaut").setLevel(logging.ERROR)
+
+        # Configure SQL logging if requested
+        from testronaut.models.base import configure_sql_logging
+
+        configure_sql_logging(debug=sql_debug)
 
         # Initialize database
         create_db_and_tables()
@@ -663,9 +631,18 @@ def db_reset(
 
 
 @db_app.command("info")
-def db_info() -> None:
+def db_info(
+    sql_debug: bool = typer.Option(False, "--sql-debug", help="Enable detailed SQL query logging"),
+) -> None:
     """Display information about the database."""
     try:
+        # Configure SQL logging if requested
+        if sql_debug:
+            from testronaut.models.base import configure_sql_logging
+
+            configure_sql_logging(debug=True)
+            logger.debug("SQL debugging enabled")
+
         with Session(engine) as session:
             # Get table information
             tables = SQLModel.metadata.tables
@@ -695,6 +672,81 @@ def db_info() -> None:
     except Exception as e:
         console.print(f"[bold red]Error getting database info:[/bold red] {str(e)}")
         logger.exception("Failed to get database info")
+        raise typer.Exit(1)
+
+
+@db_app.command("browser")
+def db_browser(
+    tool_name: Optional[str] = typer.Argument(None, help="Name of the tool to browse"),
+    debug: bool = typer.Option(False, "--debug", "-d", help="Enable debug logging for the browser"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress all log messages"),
+    sql_debug: bool = typer.Option(False, "--sql-debug", help="Enable detailed SQL query logging"),
+) -> None:
+    """
+    Launch an interactive database browser for exploring analyzed CLI tools.
+    """
+    from rich.console import Console
+
+    console = Console()
+
+    try:
+        # Configure logging based on the quiet and debug flags
+        if debug:
+            console.print("Debug mode enabled. Some log messages will be shown.")
+            # Only adjust root logger if debug is enabled
+            logging.getLogger().setLevel(logging.INFO)
+
+            # Set testronaut logger to DEBUG for detailed info
+            testronaut_logger = logging.getLogger("testronaut")
+            testronaut_logger.setLevel(logging.DEBUG)
+
+            # Specifically set the UI logger to DEBUG
+            ui_logger = logging.getLogger("testronaut.ui")
+            ui_logger.setLevel(logging.DEBUG)
+
+            # Add a console handler for direct output during debugging
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(
+                logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+            )
+            ui_logger.addHandler(console_handler)
+            ui_logger.debug("UI Debug logging enabled")
+        elif quiet:
+            # In quiet mode, suppress all logging
+            logging.getLogger().setLevel(logging.ERROR)
+            logging.getLogger("testronaut").setLevel(logging.ERROR)
+
+        # Configure SQL logging if requested
+        from testronaut.models.base import configure_sql_logging
+
+        configure_sql_logging(debug=sql_debug)
+
+        # Initialize database
+        create_db_and_tables()
+
+        tool_id = None
+        if tool_name:
+            # If a tool name was provided, find its ID
+            repo = CLIToolRepository()
+            tool = repo.get_by_name(tool_name)
+            if tool:
+                tool_id = str(tool.id)
+                console.print(f"Loading tool: [bold]{tool_name}[/bold]")
+            else:
+                console.print(
+                    f"[yellow]Warning:[/yellow] Tool '{tool_name}' not found in database."
+                )
+
+        # Import here to avoid circular imports
+        from testronaut.ui.browser import run_browser
+
+        # Run the browser (this will take over the terminal)
+        run_browser(tool_id)
+
+    except Exception as e:
+        console.print(f"[red]Error launching browser: {str(e)}[/red]")
+        if debug:
+            console.print_exception()
         raise typer.Exit(1)
 
 

@@ -356,3 +356,108 @@ class LLMResultProcessor:
                 result["risk_level"] = "high"
 
         return result
+
+    @staticmethod
+    def process_tool_purpose_analysis(text: str) -> Dict[str, Any]:
+        """
+        Process tool purpose analysis from LLM response.
+
+        Args:
+            text: The LLM response text.
+
+        Returns:
+            Dictionary with tool purpose analysis information.
+        """
+        # Try to extract structured data first
+        try:
+            return LLMResultProcessor.extract_json_from_text(text)
+        except ValidationError:
+            pass
+
+        # Fall back to regex-based extraction
+        result = {"purpose": "", "background": "", "use_cases": [], "testing_considerations": []}
+
+        # Extract purpose
+        purpose_match = re.search(
+            r"(?:Purpose|1\.)[^\n]*?\n\s*(.*?)(?:\n\s*\n|\n\s*[2-9]\.)", text, re.DOTALL
+        )
+        if purpose_match:
+            result["purpose"] = purpose_match.group(1).strip()
+
+        # Extract background
+        background_match = re.search(
+            r"(?:Background|2\.)[^\n]*?\n\s*(.*?)(?:\n\s*\n|\n\s*[3-9]\.)", text, re.DOTALL
+        )
+        if background_match:
+            result["background"] = background_match.group(1).strip()
+
+        # Extract use cases
+        use_cases_text = ""
+        use_cases_match = re.search(
+            r"(?:Use Cases|3\.)[^\n]*?\n\s*(.*?)(?:\n\s*\n|\n\s*[4-9]\.)", text, re.DOTALL
+        )
+        if use_cases_match:
+            use_cases_text = use_cases_match.group(1).strip()
+            # Extract individual use cases
+            use_cases = re.findall(r"[-*]\s*(.*?)(?:\n|$)", use_cases_text)
+            if use_cases:
+                result["use_cases"] = [uc.strip() for uc in use_cases]
+            else:
+                # If no bullet points, treat as single paragraph
+                result["use_cases"] = [use_cases_text]
+
+        # Extract testing considerations
+        testing_text = ""
+        testing_match = re.search(
+            r"(?:Testing Considerations|4\.)[^\n]*?\n\s*(.*?)(?:\n\s*\n|\Z)", text, re.DOTALL
+        )
+        if testing_match:
+            testing_text = testing_match.group(1).strip()
+            # Extract individual considerations
+            considerations = re.findall(r"[-*]\s*(.*?)(?:\n|$)", testing_text)
+            if considerations:
+                result["testing_considerations"] = [c.strip() for c in considerations]
+            else:
+                # If no bullet points, treat as single paragraph
+                result["testing_considerations"] = [testing_text]
+
+        return result
+
+    @staticmethod
+    def extract_purpose(text: str) -> str:
+        """
+        Extract command purpose from LLM response text.
+
+        Args:
+            text: The LLM response text.
+
+        Returns:
+            The extracted purpose as a string.
+        """
+        # Try to extract structured data first
+        try:
+            json_data = LLMResultProcessor.extract_json_from_text(text)
+            if "purpose" in json_data:
+                return json_data["purpose"]
+        except ValidationError:
+            pass
+
+        # Extract purpose section
+        purpose_match = re.search(
+            r"(?:Purpose|1\.)[^\n]*?\n\s*(.*?)(?:\n\s*\n|\n\s*[2-9]\.)", text, re.DOTALL
+        )
+        if purpose_match:
+            return purpose_match.group(1).strip()
+
+        # If no clear purpose section, use the first paragraph
+        paragraphs = text.split("\n\n")
+        if paragraphs:
+            first_para = paragraphs[0].strip()
+            # Remove common prefixes
+            prefixes = ["Purpose:", "The purpose is", "This command's purpose is"]
+            for prefix in prefixes:
+                if first_para.startswith(prefix):
+                    first_para = first_para[len(prefix) :].strip()
+            return first_para
+
+        return ""
