@@ -174,29 +174,4 @@ class DefaultLLMManager(LLMManager):
         # TODO: Delegate to self.provider.compare_outputs(...) or implement using generate_text
         raise NotImplementedError("compare_outputs not yet implemented.")
 
-# Register this manager with the LLMManagerFactory
-from testronaut.factory import registry # Import registry
-from testronaut.factory.llm import LLMManagerFactory # Import factory
-
-def register_llm_manager():
-    """Registers the DefaultLLMManager with the global factory registry."""
-    try:
-        # Use get_factory instead of get
-        factory = registry.get_factory("llm_manager")
-        if factory is None:
-             print("Error: 'llm_manager' factory not found in registry.")
-             return
-        if isinstance(factory, LLMManagerFactory):
-            factory.register_manager_class("default", DefaultLLMManager)
-            print("Registered DefaultLLMManager with the factory.")
-        else:
-            print(f"Error: Expected LLMManagerFactory, but found {type(factory)} in registry.")
-    except KeyError:
-        print("Error: 'llm_manager' not found in the factory registry.")
-    except Exception as e:
-        print(f"Error during LLM manager registration: {e}")
-
-# Call the registration function when this module is imported.
-# Note: This approach has potential side effects. A dedicated initialization
-# function called from the application entry point is generally preferred.
-register_llm_manager()
+# Registration is now handled in src/testronaut/factory/__init__.py

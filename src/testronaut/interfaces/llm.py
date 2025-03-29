@@ -3,13 +3,28 @@ LLM Manager Interface.
 
 This module defines the interface for interacting with Language Learning Models.
 """
-from typing import Any, Dict, List, Protocol, runtime_checkable
+from typing import Any, Dict, List, Protocol, runtime_checkable, Optional
+
+# Import base provider protocol for type hinting
+# It's okay if this causes a temporary circular import warning during type checking,
+# as it's only used for type hints. Runtime behavior is fine.
+try:
+    from testronaut.llm.providers.base import BaseLLMProvider
+except ImportError:
+    # Define a placeholder if the import fails (e.g., during initial setup)
+    BaseLLMProvider = Any
 
 
 @runtime_checkable
 class LLMManager(Protocol):
     """Protocol defining the interface for LLM managers."""
 
+    # --- Attributes expected on implementations ---
+    provider: Optional["BaseLLMProvider"] # Re-added type hint
+    provider_name: Optional[str]
+    # --- End Attributes ---
+
+    # --- Methods ---
     def initialize(self, provider: str, **config) -> bool:
         """
         Initialize the LLM manager with a specific provider.

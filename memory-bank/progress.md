@@ -238,8 +238,10 @@ The implementation plan follows a sequential approach with some parallel develop
 - [x] Interactive database browser with Textual UI
 - [x] Foundational LLM Manager implementation (`DefaultLLMManager`)
 - [x] Basic `LlamaCppProvider` structure for local models
-- [x] Configuration support for `llama-cpp` provider
+- [x] Configuration support for `llama-cpp` provider (`RegisteredModel`, list)
 - [x] `llama-cpp-python` moved to optional dependencies
+- [x] Hugging Face GGUF download utility (`llm.utils.download_gguf_model`)
+- [x] Refactored `config` CLI command: Added `llm` subcommand (`add`, `list`, `remove`, `set`)
 
 ## Current Development Focus
 

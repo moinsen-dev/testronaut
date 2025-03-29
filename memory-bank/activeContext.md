@@ -114,9 +114,11 @@ We are now ready to move to Phase 005 - Test Plan Generator implementation.
 12. **Created `BaseLLMProvider` protocol.**
 13. **Moved `llama-cpp-python` to optional dependencies.**
 14. **Installed `llama-cpp-python` dependency.**
-15. **Added `llama-cpp` configuration to `LLMSettings`.**
+15. **Added `llama-cpp` configuration structure (`RegisteredModel`, list) to `LLMSettings`.**
 16. **Implemented provider loading in `DefaultLLMManager`.**
 17. **Registered `DefaultLLMManager` with the factory.**
+18. **Implemented Hugging Face GGUF download utility.**
+19. **Refactored `config` CLI command:** Removed `test-llm`, added `llm` subcommand group with `add`, `list`, `remove`, `set` commands for local model management.
 
 ## Current Tasks
 
@@ -150,8 +152,11 @@ We are now ready to move to Phase 005 - Test Plan Generator implementation.
    - [ ] Implement `analyze_help_text` using `generate_text`
    - [ ] Implement `compare_outputs` using `generate_text`
 3. Configuration
-   - [ ] Ensure provider-specific config (e.g., `model_path`) is passed correctly during initialization.
-4. Testing
+   - [ ] Ensure provider-specific config (e.g., `model_path`, `n_ctx`) is passed correctly during initialization.
+4. CLI (`config llm`)
+   - [ ] Refine error handling and user feedback.
+   - [ ] Add tests for the new CLI commands.
+5. Testing (Core LLM)
    - [ ] Add unit/integration tests for LLM Manager and LlamaCppProvider.
 
 ## Decisions & Considerations
