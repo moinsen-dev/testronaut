@@ -8,6 +8,7 @@ from testronaut.interfaces.llm import LLMManager
 from testronaut.utils.errors import ConfigurationError, LLMServiceError
 from testronaut.llm.providers.base import BaseLLMProvider # Import from base
 from testronaut.llm.providers.llama_cpp_provider import LlamaCppProvider # Import the provider
+from testronaut.llm.providers.mock_provider import MockProvider # Import the mock provider
 
 
 # BaseLLMProvider protocol is now defined in .providers.base
@@ -22,16 +23,22 @@ class DefaultLLMManager(LLMManager):
     def __init__(self, default_provider: str = "mock", **kwargs):
         """Initialize the DefaultLLMManager."""
         self.provider: Optional[BaseLLMProvider] = None # Use the base protocol if defined
+        self.provider: Optional[BaseLLMProvider] = None
         self.provider_name: Optional[str] = None
-        self.config = kwargs
-        print(f"Initializing DefaultLLMManager with default provider '{default_provider}' and config: {self.config}")
-        # Attempt to initialize the default provider immediately
+        self.config = kwargs # Store the full config passed in kwargs
+
+        # Determine the actual provider to use: from config first, then the default argument
+        provider_to_initialize = self.config.get("provider", default_provider)
+        print(f"Initializing DefaultLLMManager. Configured provider: '{self.config.get('provider')}', Default argument: '{default_provider}', Effective provider: '{provider_to_initialize}'")
+
+        # Attempt to initialize the determined provider immediately
         try:
-            # Pass only relevant config keys for the provider
-            provider_config = self.config.get(default_provider, {})
-            self.initialize(provider=default_provider, **provider_config)
+            # Get the specific settings for the provider we are trying to initialize
+            provider_specific_settings = self.config.get("provider_settings", {}).get(provider_to_initialize, {})
+            # Pass only the provider-specific settings to initialize
+            self.initialize(provider=provider_to_initialize, **provider_specific_settings)
         except ConfigurationError as e:
-            print(f"Warning: Failed to initialize default provider '{default_provider}': {e}")
+            print(f"Warning: Failed to initialize provider '{provider_to_initialize}': {e}")
             # Proceed without a provider, user must call initialize explicitly or configure correctly
         except Exception as e:
             print(f"Unexpected error initializing default provider '{default_provider}': {e}")
@@ -76,9 +83,10 @@ class DefaultLLMManager(LLMManager):
         # TODO: Add mappings for other providers (openai, anthropic, mock)
         provider_map: Dict[str, Type[BaseLLMProvider]] = {
             "llama-cpp": LlamaCppProvider,
+            "mock": MockProvider,
+            # TODO: Add mappings for other providers (openai, anthropic)
             # "openai": OpenAIProvider,
             # "anthropic": AnthropicProvider,
-            # "mock": MockProvider,
         }
         provider_class = provider_map.get(provider_name)
         if provider_class is None:

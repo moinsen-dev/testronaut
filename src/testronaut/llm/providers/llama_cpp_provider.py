@@ -39,9 +39,11 @@ class LlamaCppProvider:
 
         try:
             print(f"Loading Llama model from: {self.model_path}")
-            print(f"Llama params: {self.llama_kwargs}")
-            # Ensure verbose is explicitly passed if present, default to True for debugging
-            verbose = self.llama_kwargs.get('verbose', True)
+            # Extract verbose explicitly, remove from kwargs to avoid duplicate passing
+            verbose = self.llama_kwargs.pop('verbose', False) # Default to False as per config
+            print(f"Llama params (excluding verbose): {self.llama_kwargs}")
+            print(f"Verbose setting: {verbose}")
+            # Pass model_path, verbose explicitly, then remaining kwargs
             self.llm = Llama(model_path=self.model_path, verbose=verbose, **self.llama_kwargs)
             print("Llama model loaded successfully.")
         except Exception as e:
