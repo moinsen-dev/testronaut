@@ -33,6 +33,183 @@ analyze_app = typer.Typer(
     invoke_without_command=True # Allow callback to run if no subcommand is specified
 )
 
+# --- Helper Function for Analysis ---
+
+def _perform_analysis(
+    tool_path: str,
+    output_dir: str,
+    deep: bool = False,
+    enhanced: bool = False,
+    verbose: bool = False, # Pass verbose for logging within this function if needed
+    save_to_db: bool = True, # Match Typer default
+    force_reanalysis: bool = False,
+    sql_debug: bool = False, # Pass sql_debug for potential use
+    interactive: bool = False,
+    max_commands: Optional[int] = None, # Keep None default
+) -> None: # type: ignore # Suppress persistent Pylance error on definition
+    """Helper function to encapsulate the core analysis logic."""
+    console.print(f"Analyzing tool: [bold]{tool_path}[/bold]")
+
+    try:
+        # Create output directory if it doesn't exist
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Initialize database (assuming it's safe to call multiple times)
+        logger.debug("Initializing database")
+        create_db_and_tables()
+
+        # Get the analyzer factory
+        analyzer_factory = registry.get_factory("cli_analyzer")
+        if analyzer_factory is None:
+            raise ValueError("CLI Analyzer factory not registered")
+
+        # Create an analyzer
+        analyzer_type = "standard"
+        if enhanced or deep:  # If either enhanced or deep is specified, use LLM-enhanced
+            analyzer_type = "llm_enhanced"
+
+        analyzer = analyzer_factory.create(analyzer_type)
+
+        console.print(f"Using [bold]{analyzer_type}[/bold] analyzer for analysis")
+
+        # Extract tool name from path
+        tool_name = os.path.basename(tool_path)
+
+        # Create a detailed progress display
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}[/bold blue]"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            # Start a task
+            task = progress.add_task(f"Analyzing {tool_name}...", total=None)
+
+            # Call the analyze_tool function (renamed to run_analysis for clarity)
+            cli_tool = run_analysis(
+                tool_path=tool_path,
+                output=output_path,
+                deep=deep,
+                enhanced=enhanced,
+                verbose=verbose,
+                sql_debug=sql_debug,
+                interactive=interactive,
+                max_commands=max_commands,
+            )
+
+            # Complete the task
+            progress.update(task, description="Analysis complete!", completed=True)
+
+        # Export semantic analysis for LLM-enhanced analyzer
+        semantic_analysis: Optional[Dict[str, Any]] = None # Explicit type hint
+        if enhanced or deep:
+            # Create semantic analysis directory
+            semantic_path = output_path / "semantic"
+            semantic_path.mkdir(exist_ok=True)
+
+            # Check for analyzer's metadata and extract semantic_analysis safely
+            if hasattr(analyzer, "metadata"):
+                analyzer_metadata = getattr(analyzer, "metadata", None)
+                if isinstance(analyzer_metadata, dict):
+                    semantic_analysis = analyzer_metadata.get("semantic_analysis")
+                elif hasattr(analyzer_metadata, "__dict__"): # Handle object case
+                     semantic_analysis = getattr(analyzer_metadata, "semantic_analysis", None)
+
+                # Ensure semantic_analysis is a dict if not None
+                if semantic_analysis is not None and not isinstance(semantic_analysis, dict):
+                    logger.warning("Semantic analysis metadata is not in the expected dictionary format. Skipping export.")
+                    semantic_analysis = None # Reset if not a dict
+
+            # Get commands from cli_tool instead of analyzer
+            # Add explicit check that semantic_analysis is a dict before iterating
+            if isinstance(semantic_analysis, dict) and hasattr(cli_tool, "commands"):
+                logger.debug(f"Exporting semantic analysis for {len(semantic_analysis)} commands.")
+                for cmd in cli_tool.commands:
+                    # Check cmd.id exists and is in the dict keys
+                    if hasattr(cmd, "id") and cmd.id in semantic_analysis:
+                        try:
+                            semantic_data = semantic_analysis[cmd.id] # Get item
+                            semantic_file = semantic_path / f"{cmd.name}.json"
+                            with open(semantic_file, "w") as f:
+                                json.dump(semantic_data, f, indent=2)
+                        except Exception as json_err:
+                            logger.error(f"Failed to dump semantic analysis for command {cmd.name}: {json_err}")
+                    # else: # Optional: log if cmd.id not found
+                    #    logger.debug(f"Command ID {getattr(cmd, 'id', 'N/A')} not found in semantic_analysis keys.")
+
+        # Save to database
+        if save_to_db:
+            progress_status = console.status(
+                "[bold blue]Saving analysis results to database...[/bold blue]"
+            )
+            progress_status.start()
+
+            try:
+                # Create a repository
+                repository = CLIToolRepository()
+
+                # Save the analysis results using the cli_tool from the run_analysis function
+                # semantic_analysis is now guaranteed to be Dict[str, Any] | None
+                repository.save_analysis_results(
+                    cli_tool, semantic_analysis, force_update=force_reanalysis
+                )
+
+                progress_status.stop()
+                console.print("[bold green]Analysis results saved to database.[/bold green]")
+            except Exception as db_error:
+                progress_status.stop()
+                console.print(f"[bold red]Error saving to database:[/bold red] {str(db_error)}")
+                if verbose:
+                    import traceback
+                    console.print(f"[red]{traceback.format_exc()}[/red]")
+                logger.exception(f"Failed to save to database: {str(db_error)}")
+
+        # Get command count from cli_tool
+        command_count = len(cli_tool.commands) if hasattr(cli_tool, "commands") else 0
+
+        # Report findings
+        console.print(
+            Panel.fit(
+                f"[bold green]Analysis of {tool_name} completed![/bold green]\n"
+                f"Found {command_count} top-level commands.\n" # Note: This might include subcommands depending on analysis result
+                f"Results saved to: {output_path}"
+                + ("\nResults saved to database." if save_to_db else "")
+            )
+        )
+
+        # Display analysis summary
+        console.print(Panel(f"[bold]Analysis Results for {tool_path}[/bold]", expand=False))
+        console.print(f"[bold]Name:[/bold] {cli_tool.name}")
+        console.print(f"[bold]Version:[/bold] {cli_tool.version or 'Unknown'}")
+        console.print(f"[bold]Description:[/bold] {cli_tool.description or 'None'}")
+
+        # Display commands
+        console.print(f"\n[bold]Commands:[/bold] {len(cli_tool.commands)}")
+
+        for i, command in enumerate(cli_tool.commands, 1):
+            if i > 10:
+                console.print(f"... and {len(cli_tool.commands) - 10} more commands")
+                break
+
+            # Safely access command attributes
+            cmd_name = getattr(command, "name", "Unknown")
+            cmd_desc = getattr(command, "description", "No description")
+            console.print(f"  [bold]{cmd_name}[/bold]: {cmd_desc}")
+
+        # Display token usage if enhanced analysis was used
+        if enhanced and cli_tool.meta_data and cli_tool.meta_data.llm_usage:
+            display_token_usage(cli_tool.meta_data.llm_usage)
+
+        # Save user preferences for this tool
+        save_user_preferences(tool_name, enhanced)
+
+    except Exception as e:
+        # Re-raise the exception to be caught by the main callback
+        raise e
+
+
+# --- Main Callback ---
 
 @analyze_app.callback()
 def analyze_callback(
@@ -80,186 +257,40 @@ def analyze_callback(
     # Only run analysis if no subcommand was invoked AND a tool_path was provided
     if ctx.invoked_subcommand is None:
         if tool_path is None:
-            # This should ideally be caught by Typer if Argument is required,
-            # but we add a check for robustness.
             console.print("[bold red]Error:[/bold red] Tool name/path argument is required when not using a subcommand.")
             raise typer.Exit(code=1)
 
-        console.print(f"Analyzing tool: [bold]{tool_path}[/bold]")
-
-        # Configure verbose logging if requested
+        # Configure logging first
         if verbose:
             logger.setLevel(logging.DEBUG)
             logger.debug("Verbose logging enabled")
-
-        # Configure SQL logging if requested
         if sql_debug:
             configure_sql_logging(debug=True)
             logger.debug("SQL debugging enabled")
 
+        # Call the helper function to perform the analysis
         try:
-            # Create output directory if it doesn't exist
-            output_path = Path(output_dir)
-            output_path.mkdir(parents=True, exist_ok=True)
-
-            # Initialize database
-            logger.debug("Initializing database")
-            create_db_and_tables()
-
-            # Get the analyzer factory
-            analyzer_factory = registry.get_factory("cli_analyzer")
-            if analyzer_factory is None:
-                raise ValueError("CLI Analyzer factory not registered")
-
-            # Create an analyzer
-            analyzer_type = "standard"
-            if enhanced or deep:  # If either enhanced or deep is specified, use LLM-enhanced
-                analyzer_type = "llm_enhanced"
-
-            analyzer = analyzer_factory.create(analyzer_type)
-
-            console.print(f"Using [bold]{analyzer_type}[/bold] analyzer for analysis")
-
-            # Extract tool name from path
-            tool_name = os.path.basename(tool_path)
-
-            # Create a detailed progress display
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[bold blue]{task.description}[/bold blue]"),
-                TimeElapsedColumn(),
-                console=console,
-            ) as progress:
-                # Start a task
-                task = progress.add_task(f"Analyzing {tool_name}...", total=None)
-
-                # Call the analyze_tool function (renamed to run_analysis for clarity)
-                cli_tool = run_analysis(
-                    tool_path=tool_path,
-                    output=output_path,
-                    deep=deep,
-                    enhanced=enhanced,
-                    verbose=verbose,
-                    sql_debug=sql_debug,
-                    interactive=interactive,
-                    max_commands=max_commands,
-                )
-
-                # Complete the task
-                progress.update(task, description="Analysis complete!", completed=True)
-
-            # Export semantic analysis for LLM-enhanced analyzer
-            semantic_analysis: Optional[Dict[str, Any]] = None # Explicit type hint
-            if enhanced or deep:
-                # Create semantic analysis directory
-                semantic_path = output_path / "semantic"
-                semantic_path.mkdir(exist_ok=True)
-
-                # Check for analyzer's metadata and extract semantic_analysis safely
-                if hasattr(analyzer, "metadata"):
-                    analyzer_metadata = getattr(analyzer, "metadata", None)
-                    if isinstance(analyzer_metadata, dict):
-                        semantic_analysis = analyzer_metadata.get("semantic_analysis")
-                    elif hasattr(analyzer_metadata, "__dict__"): # Handle object case
-                         semantic_analysis = getattr(analyzer_metadata, "semantic_analysis", None)
-
-                    # Ensure semantic_analysis is a dict if not None
-                    if semantic_analysis is not None and not isinstance(semantic_analysis, dict):
-                        logger.warning("Semantic analysis metadata is not in the expected dictionary format. Skipping export.")
-                        semantic_analysis = None # Reset if not a dict
-
-                # Get commands from cli_tool instead of analyzer
-                # Add explicit check that semantic_analysis is a dict before iterating
-                if isinstance(semantic_analysis, dict) and hasattr(cli_tool, "commands"):
-                    logger.debug(f"Exporting semantic analysis for {len(semantic_analysis)} commands.")
-                    for cmd in cli_tool.commands:
-                        # Check cmd.id exists and is in the dict keys
-                        if hasattr(cmd, "id") and cmd.id in semantic_analysis:
-                            try:
-                                semantic_data = semantic_analysis[cmd.id] # Get item
-                                semantic_file = semantic_path / f"{cmd.name}.json"
-                                with open(semantic_file, "w") as f:
-                                    json.dump(semantic_data, f, indent=2)
-                            except Exception as json_err:
-                                logger.error(f"Failed to dump semantic analysis for command {cmd.name}: {json_err}")
-                        # else: # Optional: log if cmd.id not found
-                        #    logger.debug(f"Command ID {getattr(cmd, 'id', 'N/A')} not found in semantic_analysis keys.")
-
-            # Save to database
-            if save_to_db:
-                progress_status = console.status(
-                    "[bold blue]Saving analysis results to database...[/bold blue]"
-                )
-                progress_status.start()
-
-                try:
-                    # Create a repository
-                    repository = CLIToolRepository()
-
-                    # Save the analysis results using the cli_tool from the run_analysis function
-                    # semantic_analysis is now guaranteed to be Dict[str, Any] | None
-                    repository.save_analysis_results(
-                        cli_tool, semantic_analysis, force_update=force_reanalysis
-                    )
-
-                    progress_status.stop()
-                    console.print("[bold green]Analysis results saved to database.[/bold green]")
-                except Exception as db_error:
-                    progress_status.stop()
-                    console.print(f"[bold red]Error saving to database:[/bold red] {str(db_error)}")
-                    if verbose:
-                        import traceback
-
-                        console.print(f"[red]{traceback.format_exc()}[/red]")
-                    logger.exception(f"Failed to save to database: {str(db_error)}")
-
-            # Get command count from cli_tool
-            command_count = len(cli_tool.commands) if hasattr(cli_tool, "commands") else 0
-
-            # Report findings
-            console.print(
-                Panel.fit(
-                    f"[bold green]Analysis of {tool_name} completed![/bold green]\n"
-                    f"Found {command_count} top-level commands.\n"
-                    f"Results saved to: {output_path}"
-                    + ("\nResults saved to database." if save_to_db else "")
-                )
+            _perform_analysis(
+                tool_path=tool_path,
+                output_dir=output_dir,
+                deep=deep,
+                enhanced=enhanced,
+                verbose=verbose,
+                save_to_db=save_to_db,
+                force_reanalysis=force_reanalysis,
+                sql_debug=sql_debug,
+                interactive=interactive,
+                max_commands=max_commands,
             )
-
-            # Display analysis summary
-            console.print(Panel(f"[bold]Analysis Results for {tool_path}[/bold]", expand=False))
-            console.print(f"[bold]Name:[/bold] {cli_tool.name}")
-            console.print(f"[bold]Version:[/bold] {cli_tool.version or 'Unknown'}")
-            console.print(f"[bold]Description:[/bold] {cli_tool.description or 'None'}")
-
-            # Display commands
-            console.print(f"\n[bold]Commands:[/bold] {len(cli_tool.commands)}")
-
-            for i, command in enumerate(cli_tool.commands, 1):
-                if i > 10:
-                    console.print(f"... and {len(cli_tool.commands) - 10} more commands")
-                    break
-
-                # Safely access command attributes
-                cmd_name = getattr(command, "name", "Unknown")
-                cmd_desc = getattr(command, "description", "No description")
-                console.print(f"  [bold]{cmd_name}[/bold]: {cmd_desc}")
-
-            # Display token usage if enhanced analysis was used
-            if enhanced and cli_tool.meta_data and cli_tool.meta_data.llm_usage:
-                display_token_usage(cli_tool.meta_data.llm_usage)
-
-            # Save user preferences for this tool
-            save_user_preferences(tool_name, enhanced)
-
         except Exception as e:
-            console.print(f"[bold red]Error:[/bold red] {str(e)}")
+            # Catch errors from _perform_analysis and display them
+            console.print(f"[bold red]Analysis Error:[/bold red] {str(e)}")
             if verbose:
                 import traceback
-
                 console.print(f"[red]{traceback.format_exc()}[/red]")
-            logger.exception(f"Failed to analyze tool: {str(e)}")
+            logger.exception(f"Failed to analyze tool '{tool_path}': {str(e)}")
             raise typer.Exit(code=1)
+
     else:
         # A subcommand was invoked, do nothing in the main callback
         logger.debug(f"Subcommand '{ctx.invoked_subcommand}' invoked, skipping main analysis.")

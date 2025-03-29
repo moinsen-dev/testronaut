@@ -8,7 +8,11 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
-from testronaut.config import Settings, save_config_file, settings
+# Import necessary components from their new locations
+from testronaut.config.loader import get_settings
+from testronaut.config.models import Settings
+from testronaut.config.file_io import save_config_file, load_config_file # Added load_config_file import
+from testronaut.utils.errors import ConfigurationError # Keep error import
 
 
 def initialize_config(
@@ -30,7 +34,7 @@ def initialize_config(
     """
     # Use default config dir if not specified
     if config_dir is None:
-        config_dir = settings.config_path
+        config_dir = get_settings().config_path # Use get_settings()
     else:
         config_dir = Path(os.path.expanduser(config_dir))
 
@@ -63,7 +67,7 @@ def update_config(
     """
     # Use default config path if not specified
     if config_file is None:
-        config_file = settings.config_path / 'config.yaml'
+        config_file = get_settings().config_path / 'config.yaml' # Use get_settings()
     else:
         config_file = Path(os.path.expanduser(config_file))
 
@@ -72,7 +76,7 @@ def update_config(
 
     # Load existing config or create a new one
     if config_file.exists():
-        from testronaut.config import load_config_file
+        # load_config_file is now imported directly at the top
         existing_config = load_config_file(config_file)
     else:
         # Start with settings defaults
@@ -101,4 +105,4 @@ def get_config_path() -> Path:
     Returns:
         The path to the configuration directory.
     """
-    return settings.config_path
+    return get_settings().config_path # Use get_settings()

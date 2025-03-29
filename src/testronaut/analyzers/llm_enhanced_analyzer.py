@@ -2,12 +2,13 @@
 LLM-Enhanced CLI Analyzer Implementation.
 
 This module provides an implementation of the CLI analyzer interface that uses
-LLM capabilities to enhance the analysis of CLI tools.
+LLM capabilities to enhance the analysis of CLI tools. It delegates specific
+LLM interaction tasks to the LLMAnalysisHelper class.
 """
 
 import re
 import time
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, cast, Union # Import Union
 
 from testronaut.analyzers.standard_analyzer import StandardCLIAnalyzer
 from testronaut.interfaces import CLIAnalyzer
@@ -15,20 +16,30 @@ from testronaut.models import Argument, CLITool, Command, Example, Option
 from testronaut.models.cli_tool import (
     TokenUsage,
     add_relationship_analysis,
+    MetaData, # Import MetaData
 )
 from testronaut.utils.command import CommandRunner
 from testronaut.utils.errors import CommandExecutionError, LLMServiceError, ValidationError
 from testronaut.utils.llm import LLMService
-from testronaut.utils.llm.prompts import CLIAnalysisPrompts
+# Prompts might not be needed directly here anymore if helper handles all prompt selection
+# from testronaut.utils.llm.prompts import CLIAnalysisPrompts
 from testronaut.utils.llm.result_processor import LLMResultProcessor
 from testronaut.utils.logging import get_logger
+
+# Import the new helper class
+from .llm_helper import LLMAnalysisHelper
 
 # Initialize logger
 logger = get_logger(__name__)
 
 
 class LLMEnhancedAnalyzer(CLIAnalyzer):
-    """LLM-enhanced implementation of CLI tool analyzer."""
+    """
+    LLM-enhanced implementation of CLI tool analyzer.
+
+    Orchestrates the analysis process, combining standard analysis techniques
+    with LLM enhancements provided by LLMAnalysisHelper.
+    """
 
     def __init__(
         self,
@@ -43,250 +54,84 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
             llm_service: LLM service for enhancing analysis.
         """
         self.standard_analyzer = StandardCLIAnalyzer(command_runner)
-        self.llm_service = llm_service or LLMService()
-        self.result_processor = LLMResultProcessor()
-        self.token_usage = TokenUsage()
+        self.llm_service = llm_service or LLMService() # Keep LLMService instance
+        self.result_processor = LLMResultProcessor() # Keep ResultProcessor instance
+        # Instantiate the helper, passing dependencies
+        self.llm_helper = LLMAnalysisHelper(self.llm_service, self.result_processor)
+        self.token_usage = TokenUsage() # Keep token usage tracking here
 
-    def _track_llm_usage(self, llm_service: LLMService) -> None:
+    def _track_llm_usage(self) -> None:
         """
-        Track token usage from the LLM service after an API call.
-
-        Args:
-            llm_service: The LLM service instance
+        Track token usage from the LLM service after an API call made via the helper.
+        Assumes the LLMService instance updates its `last_token_usage` attribute.
         """
+        llm_service = self.llm_service # Use the instance variable
         if hasattr(llm_service, "last_token_usage") and llm_service.last_token_usage:
             usage = llm_service.last_token_usage
-            # Extract model name from usage if available
-            model = usage.get("model", None)
-            # Add the usage to our tracker
+            model = usage.get("model", self.llm_service.settings.llm.model) # Get model used
             self.token_usage.add_usage(
                 total_tokens=usage.get("total_tokens", 0),
                 prompt_tokens=usage.get("prompt_tokens", 0),
                 completion_tokens=usage.get("completion_tokens", 0),
                 model=model,
             )
-            # Log token usage
             logger.debug(
                 f"LLM token usage: +{usage.get('total_tokens', 0)} tokens, "
                 f"model: {model or 'unknown'}, totals: {self.token_usage.total_tokens} tokens, "
                 f"{self.token_usage.api_calls} calls, est. cost: ${self.token_usage.estimated_cost:.4f}"
             )
+            # Reset last usage on service to prevent double counting
+            llm_service.last_token_usage = None
+
+    # --- Public Interface Methods ---
 
     def verify_tool_installation(self, tool_name: str) -> bool:
-        """
-        Verify if a CLI tool is installed and accessible.
-
-        Args:
-            tool_name: The name of the CLI tool to verify.
-
-        Returns:
-            True if the tool is installed, False otherwise.
-        """
+        """Delegates to standard analyzer."""
         return self.standard_analyzer.verify_tool_installation(tool_name)
 
     def get_tool_help_text(self, tool_name: str) -> str:
-        """
-        Get the help text for a CLI tool.
-
-        Args:
-            tool_name: The name of the CLI tool.
-
-        Returns:
-            The help text as a string.
-
-        Raises:
-            CommandExecutionError: If the help command cannot be executed.
-        """
+        """Delegates to standard analyzer."""
         return self.standard_analyzer.get_tool_help_text(tool_name)
 
     def get_command_help_text(
         self, tool_name: str, command_name: str, parent_path: str = ""
     ) -> str:
         """
-        Get the help text for a specific command of a CLI tool.
-        Enhanced version that uses LLM as fallback when conventional methods fail.
-
-        Args:
-            tool_name: The name of the CLI tool.
-            command_name: The name of the command.
-            parent_path: The parent command path (if this is a subcommand).
-
-        Returns:
-            The help text as a string.
-
-        Raises:
-            CommandExecutionError: If the help command cannot be executed.
+        Get command help text, using LLM fallback if standard method fails.
         """
         try:
-            # First try standard method
             return self.standard_analyzer.get_command_help_text(
                 tool_name, command_name, parent_path
             )
         except CommandExecutionError as e:
             logger.warning(
-                f"Standard help text retrieval failed for {command_name}. Trying LLM fallback."
+                f"Standard help text retrieval failed for '{command_name}'. Trying LLM fallback."
             )
-            # If standard method fails, try to use LLM to generate synthetic help text
-            return self._generate_command_help_with_llm(
-                tool_name, command_name, parent_path, str(e)
-            )
-
-    def _generate_command_help_with_llm(
-        self, tool_name: str, command_name: str, parent_path: str, error_message: str
-    ) -> str:
-        """
-        Generate synthetic help text for a command using LLM when conventional methods fail.
-
-        Args:
-            tool_name: The name of the CLI tool.
-            command_name: The name of the command.
-            parent_path: The parent command path (if this is a subcommand).
-            error_message: The error message from the conventional method.
-
-        Returns:
-            Synthetic help text as a string.
-
-        Raises:
-            CommandExecutionError: If the LLM generation fails.
-        """
-        # Build the full command path
-        if parent_path:
-            full_cmd = f"{tool_name} {parent_path} {command_name}"
-        else:
-            full_cmd = f"{tool_name} {command_name}"
-
-        # Get tool help text to provide context
-        try:
-            tool_help = self.standard_analyzer.get_tool_help_text(tool_name)
-        except CommandExecutionError:
-            tool_help = f"CLI tool {tool_name} with command {command_name}"
-
-        # Use the specialized prompt for command structure inference
-        prompt = CLIAnalysisPrompts.command_structure_inference(
-            tool_name=full_cmd if not parent_path else tool_name,
-            command_name="" if not parent_path else command_name,
-            tool_help_text=tool_help,
-            error_context=error_message,
-        )
-
-        try:
-            # Generate synthetic help text
-            synthetic_help = self.llm_service.generate_text(prompt)
-            logger.info(f"Generated synthetic help text for {full_cmd} using LLM")
-            return synthetic_help
-        except LLMServiceError as e:
-            logger.error(f"LLM generation failed for {full_cmd}: {str(e)}")
-            raise CommandExecutionError(
-                f"Failed to get help text for command {full_cmd} (LLM fallback failed)",
-                details={"error": str(e), "original_error": error_message},
-            )
-
-    def _enhance_description_with_llm(self, description: Optional[str], help_text: str) -> str:
-        """
-        Enhance a tool or command description using the LLM.
-
-        Args:
-            description: The original description.
-            help_text: The full help text to analyze.
-
-        Returns:
-            Enhanced description as a string.
-        """
-        if not description or len(description.strip()) < 10:
-            # Create a prompt using our prompt template
-            prompt = CLIAnalysisPrompts.command_purpose_analysis("unknown", help_text, description)
-
             try:
-                response = self.llm_service.generate_text(prompt)
-                processed_description = self.result_processor.process_command_purpose(response)
-                return processed_description
-            except (LLMServiceError, ValidationError) as e:
-                logger.warning(f"Failed to enhance description with LLM: {str(e)}")
-                return description or ""
-        return description or ""
+                # Get tool help for context, handle potential error
+                tool_help = self.standard_analyzer.get_tool_help_text(tool_name)
+            except CommandExecutionError:
+                tool_help = f"Context for CLI tool '{tool_name}' with command '{command_name}'"
 
-    def _extract_examples_with_llm(
-        self, tool_name: str, command_name: str, help_text: str
-    ) -> List[Dict[str, str]]:
-        """
-        Extract usage examples for a command using LLM.
-
-        Args:
-            tool_name: CLI tool name.
-            command_name: Command name.
-            help_text: Command help text.
-
-        Returns:
-            List of examples.
-        """
-        # Schema for the examples
-        schema = {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "command_line": {"type": "string", "description": "The example command line"},
-                    "description": {
-                        "type": "string",
-                        "description": "Brief description of what the example does",
-                    },
-                },
-                "required": ["command_line"],
-            },
-        }
-
-        # Create a prompt focused on example extraction
-        prompt = f"""
-        Based on the following help text for the command '{command_name}' from the CLI tool '{tool_name}',
-        provide 2-3 example usage commands.
-
-        For each example, include a brief description of what it does.
-
-        Help text:
-        ```
-        {help_text[:1500] if help_text else "No help text available"}
-        ```
-
-        Format each example as a JSON object with 'command_line' and 'description' fields.
-        """
-
-        try:
-            # Generate examples using the LLM
-            examples_data = self.llm_service.generate_json(prompt, schema)
-            # Track token usage
-            self._track_llm_usage(self.llm_service)
-
-            logger.debug(f"Generated {len(examples_data)} examples with LLM")
-            return examples_data
-        except ValidationError as e:
-            logger.warning(f"Failed to validate examples from LLM: {str(e)}")
+            # Call the helper method
             try:
-                # Fallback to text generation
-                response = self.llm_service.generate_text(prompt)
-                # Track token usage
-                self._track_llm_usage(self.llm_service)
-
-                return self.process_examples(response)
-            except Exception as e:
-                logger.warning(f"Failed to process examples from LLM text: {str(e)}")
-                return []
-        except Exception as e:
-            logger.warning(f"Failed to generate examples with LLM: {str(e)}")
-            return []
+                 synthetic_help = self.llm_helper.generate_command_help_with_llm(
+                    tool_name, command_name, parent_path, str(e), tool_help
+                 )
+                 self._track_llm_usage() # Track usage after successful helper call
+                 return synthetic_help
+            except CommandExecutionError: # Catch error from helper
+                 raise # Re-raise the specific error from the helper
+            except Exception as llm_e: # Catch unexpected errors
+                 logger.error(f"Unexpected error during LLM help generation fallback: {llm_e}", exc_info=True)
+                 raise CommandExecutionError(
+                    f"Failed to get help text for command {command_name} (LLM fallback failed unexpectedly)",
+                    details={"error": str(llm_e), "original_error": str(e)},
+                 ) from llm_e
 
     def extract_examples(self, command: Command) -> List[Dict[str, Any]]:
         """
-        Extract usage examples for a specific command, enhanced with LLM.
-
-        Args:
-            command: The command to extract examples for.
-
-        Returns:
-            A list of dictionaries containing example information.
-
-        Raises:
-            CommandExecutionError: If the command help cannot be executed.
-            ValidationError: If the examples cannot be extracted.
+        Extract usage examples, combining standard and LLM methods.
         """
         # First try the standard method
         examples = self.standard_analyzer.extract_examples(command)
@@ -294,1259 +139,562 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
         # If we got no examples or just a few, try with LLM
         if len(examples) < 2:
             try:
-                # Safely access the CLI tool name - it might be an ID string or the actual object
-                cli_tool_name = ""
-                if hasattr(command, "cli_tool_id") and command.cli_tool_id:
-                    cli_tool_name = command.cli_tool_id  # Use ID directly if needed
-                elif hasattr(command, "cli_tool") and command.cli_tool:
-                    # Check if cli_tool is a string or an object
-                    if isinstance(command.cli_tool, str):
-                        cli_tool_name = command.cli_tool
-                    else:
-                        # Try to access the name attribute safely
-                        cli_tool_name = getattr(command.cli_tool, "name", str(command.cli_tool))
-                else:
-                    # Fallback to a default if no CLI tool info is available
-                    logger.warning(
-                        f"No CLI tool info available for command {command.name if hasattr(command, 'name') else 'unknown'}, using command name as fallback"
-                    )
-                    cli_tool_name = getattr(command, "name", str(command))
+                # Safely get tool name, command name, and help text
+                cli_tool_name = getattr(getattr(command, "cli_tool", None), "name", "unknown_tool")
+                command_name = getattr(command, "name", "unknown_command")
+                help_text = getattr(command, "help_text", "")
 
-                # Get the command name safely
-                command_name = getattr(command, "name", str(command))
+                if not help_text:
+                     logger.warning(f"No help text available for command '{command_name}', cannot extract examples with LLM.")
+                     return examples # Return standard examples if no help text
 
-                # Get appropriate help text
-                help_text = ""
-                if hasattr(command, "help_text") and command.help_text:
-                    help_text = command.help_text
-                else:
-                    # Try to determine parent path
-                    parent_path = ""
-                    if hasattr(command, "parent_command") and command.parent_command:
-                        parent_cmd = command.parent_command
-                        if hasattr(parent_cmd, "name"):
-                            parent_path = parent_cmd.name
-
-                    # Try to get help text from command execution
-                    try:
-                        help_text = self.get_command_help_text(
-                            cli_tool_name, command_name, parent_path=parent_path
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to get help text for {command_name}: {str(e)}")
-                        help_text = f"Command {command_name} for tool {cli_tool_name}"
-
-                # Extract examples using LLM
-                llm_examples = self._extract_examples_with_llm(
+                # Call the helper method
+                llm_examples = self.llm_helper.extract_examples_with_llm(
                     cli_tool_name, command_name, help_text
                 )
+                self._track_llm_usage() # Track usage
 
                 # Merge examples, avoiding duplicates
                 existing_cmd_lines = {ex.get("command_line", "") for ex in examples}
-                for ex in llm_examples:
-                    # Fix for the 'str' object has no attribute 'get' error
-                    if isinstance(ex, str):
-                        # If we got a string, convert it to a proper example dict
-                        cmd_line = ex
-                        desc = ""
-                    elif isinstance(ex, dict):
-                        cmd_line = ex.get("command_line", "")
-                        desc = ex.get("description", "")
-                    else:
-                        logger.warning(f"Invalid example format: {type(ex)}, skipping")
-                        continue
-
+                for ex_data in llm_examples: # ex_data is Dict[str, str] from helper
+                    cmd_line = ex_data.get("command_line")
                     if cmd_line and cmd_line not in existing_cmd_lines:
-                        examples.append({"command_line": cmd_line, "description": desc})
+                        # Ensure structure matches expected List[Dict[str, Any]]
+                        examples.append({
+                            "command_line": cmd_line,
+                            "description": ex_data.get("description", "")
+                        })
                         existing_cmd_lines.add(cmd_line)
 
             except Exception as e:
                 logger.error(
-                    f"Failed to generate examples for {getattr(command, 'name', 'unknown')}: {str(e)}"
+                    f"Failed during LLM example generation/extraction for '{getattr(command, 'name', 'unknown')}': {str(e)}",
+                    exc_info=True
                 )
 
-        return examples
+        return examples # Return combined list
 
-    def _analyze_command_semantics(self, command: Command) -> Dict[str, Any]:
+    def update_command_info(self, command: Command) -> Command:
         """
-        Perform semantic analysis of a command using LLM.
-
-        Args:
-            command: The command to analyze.
-
-        Returns:
-            Dictionary with semantic analysis information.
+        Update and enrich command info using standard and LLM methods.
         """
-        if not command.help_text or not command.cli_tool:
-            return {}
-
-        # Use the semantic analysis prompt template
-        prompt = CLIAnalysisPrompts.command_semantic_analysis(
-            command.cli_tool.name, command.name, command.help_text
-        )
-
-        schema = {
-            "type": "object",
-            "properties": {
-                "primary_function": {
-                    "type": "string",
-                    "description": "The main purpose of the command",
-                },
-                "common_use_cases": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Scenarios where this command would be used",
-                },
-                "key_options": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "importance": {"type": "string"},
-                        },
-                    },
-                    "description": "Most important options for this command",
-                },
-                "risk_level": {
-                    "type": "string",
-                    "enum": ["low", "medium", "high", "unknown"],
-                    "description": "How potentially destructive this command is",
-                },
-                "alternatives": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Alternative commands or approaches",
-                },
-                "common_patterns": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Common usage patterns for this command",
-                },
-            },
-            "required": ["primary_function", "risk_level"],
-        }
+        logger.debug(f"Updating command info for {command.name}")
 
         try:
-            # Try to get structured JSON analysis
-            analysis = self.llm_service.generate_json(prompt, schema)
-            logger.debug(f"Generated semantic analysis for command: {command.name}")
-            return cast(Dict[str, Any], analysis)
-        except LLMServiceError:
-            # Fall back to text generation and processing
-            try:
-                response = self.llm_service.generate_text(prompt)
-                analysis = self.result_processor.process_semantic_analysis(response)
-                return analysis
-            except (LLMServiceError, ValidationError) as e:
-                logger.warning(f"Failed to analyze command semantics: {str(e)}")
-                return {}
+            # 1. Run standard update first
+            self.standard_analyzer.update_command_info(command)
 
-    def _analyze_command_relationships(self, cli_tool: CLITool) -> Dict[str, Any]:
-        """
-        Analyze relationships between commands using LLM.
+            # 2. Ensure help text exists (using standard or LLM generation if needed)
+            self._ensure_command_help_text(command)
 
-        Args:
-            cli_tool: The CLI tool containing commands.
+            # 3. Enhance description if needed
+            if command.help_text and (not command.description or len(command.description) < 20):
+                try:
+                    command.description = self.llm_helper.enhance_description_with_llm(
+                        command.description, command.help_text, command.name
+                    )
+                    self._track_llm_usage()
+                except Exception as e:
+                    logger.warning(f"Failed to enhance description for '{command.name}' with LLM: {str(e)}")
 
-        Returns:
-            Dictionary with relationship information.
-        """
-        if not cli_tool.commands:
-            return {"parent_child": [], "workflows": [], "dependencies": []}
+            # 4. Extract options/args/examples/subcommands if missing, using LLM
+            if command.help_text and (not command.options or not command.arguments):
+                 logger.info(f"Attempting to extract structure for '{command.name}' using LLM as standard parsing might be incomplete.")
+                 self._extract_structure_llm(command) # Calls helper internally
 
-        # Prepare command data for the prompt
-        commands = [
-            {"name": cmd.name, "description": cmd.description or "No description"}
-            for cmd in cli_tool.commands
-        ]
-
-        # Use the relationships analysis prompt template
-        prompt = CLIAnalysisPrompts.command_relationships_analysis(cli_tool.name, commands)
-
-        schema = {
-            "type": "object",
-            "properties": {
-                "parent_child": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {"parent": {"type": "string"}, "child": {"type": "string"}},
-                        "required": ["parent", "child"],
-                    },
-                },
-                "workflows": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "steps": {"type": "array", "items": {"type": "string"}},
-                        },
-                        "required": ["name", "steps"],
-                    },
-                },
-                "dependencies": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "command": {"type": "string"},
-                            "depends_on": {"type": "string"},
-                        },
-                        "required": ["command", "depends_on"],
-                    },
-                },
-            },
-        }
-
-        try:
-            # Try to get structured JSON relationships
-            relationships = self.llm_service.generate_json(prompt, schema)
-            logger.debug(f"Generated relationship analysis for tool: {cli_tool.name}")
-            return cast(Dict[str, Any], relationships)
-        except LLMServiceError:
-            # Fall back to text generation and processing
-            try:
-                response = self.llm_service.generate_text(prompt)
-                relationships = self.result_processor.process_relationships(response)
-                return relationships
-            except (LLMServiceError, ValidationError) as e:
-                logger.warning(f"Failed to analyze command relationships: {str(e)}")
-                return {"parent_child": [], "workflows": [], "dependencies": []}
-
-    def _extract_options_and_args_with_llm(self, command: Command) -> None:
-        """
-        Extract options and arguments for a command using LLM.
-
-        Args:
-            command: The command to extract options and arguments for.
-        """
-        try:
-            cmd_data = self._extract_command_structure_with_llm(
-                command.cli_tool.name, command.name, command.help_text or ""
-            )
-
-            # Process options
-            if (
-                isinstance(cmd_data, dict)
-                and "options" in cmd_data
-                and isinstance(cmd_data["options"], list)
-            ):
-                for opt_data in cmd_data["options"]:
-                    if isinstance(opt_data, dict):
-                        option = Option(
-                            command_id=command.id,
-                            name=opt_data.get("name", ""),
-                            description=opt_data.get("description"),
-                            short_form=opt_data.get("short_form"),
-                            long_form=opt_data.get("long_form"),
-                            required=opt_data.get("required", False),
-                        )
-                        command.options.append(option)
-
-            # Process arguments
-            if (
-                isinstance(cmd_data, dict)
-                and "arguments" in cmd_data
-                and isinstance(cmd_data["arguments"], list)
-            ):
-                for i, arg_data in enumerate(cmd_data["arguments"]):
-                    if isinstance(arg_data, dict):
-                        argument = Argument(
-                            command_id=command.id,
-                            name=arg_data.get("name", ""),
-                            description=arg_data.get("description"),
-                            required=arg_data.get("required", False),
-                            position=i,
-                        )
-                        command.arguments.append(argument)
-
-        except Exception as e:
-            logger.error(f"Failed to extract options and arguments for {command.name}: {str(e)}")
-
-    def _verify_and_complete_command(self, command: Command) -> None:
-        """
-        Verify and complete command details using LLM.
-
-        Args:
-            command: The command to verify and complete.
-        """
-        # Skip processing if the command doesn't have a name
-        if not hasattr(command, "name") or not command.name:
-            logger.warning("Command has no name attribute, skipping verification")
-            return
-
-        try:
-            # Check if we need to generate help text
-            if not command.help_text:
-                logger.info(f"Generating missing help text for command: {command.name}")
-                self._generate_help_text_for_command(command)
-
-            # Check if we need to generate options and arguments
-            if not command.options:
-                logger.info(f"Generating missing options for command: {command.name}")
-                self._extract_options_and_args_with_llm(command)
-
-            # Check if we need to generate examples
+            # 5. Extract examples if missing
             if not command.examples:
-                logger.info(f"Generating examples for command: {command.name}")
-                examples_data = self.extract_examples(command)
+                 logger.info(f"Attempting to extract examples for '{command.name}' using standard and LLM methods.")
+                 examples_data = self.extract_examples(command) # Uses combined logic
+                 # Add examples if new ones were found
+                 existing_examples = {ex.command_line for ex in command.examples}
+                 for ex_data in examples_data:
+                     cmd_line = ex_data.get("command_line")
+                     if cmd_line and cmd_line not in existing_examples:
+                         command.examples.append(Example(
+                             command_id=command.id,
+                             command_line=cmd_line,
+                             description=ex_data.get("description", "")
+                         ))
+                         existing_examples.add(cmd_line)
 
-                # Create example objects
-                for example_data in examples_data:
-                    if isinstance(example_data, dict):
-                        example = Example(
-                            command_id=command.id,
-                            command_line=example_data.get("command_line", ""),
-                            description=example_data.get("description", ""),
-                        )
-                        command.examples.append(example)
+            # 6. Analyze purpose (moved from main analyze method)
+            if command.help_text and not command.purpose:
+                 try:
+                     logger.info(f"Analyzing purpose for command: {command.name}")
+                     command.purpose = self.llm_helper.analyze_subcommand_purpose(
+                         command.cli_tool.name, command.name, command.help_text
+                     )
+                     self._track_llm_usage()
+                 except Exception as e:
+                     logger.warning(f"Failed to analyze purpose for command '{command.name}': {str(e)}")
+
+
+            return command
         except Exception as e:
-            logger.error(f"Failed to verify and complete command {command.name}: {str(e)}")
+            logger.error(f"Failed during update_command_info for '{command.name}': {str(e)}", exc_info=True)
+            # Metadata is not tracked per command, so no need to check/add it here.
+            # Optionally, we could add an error flag or note to the command object itself if needed.
+            return command # Return original command on error
 
-    def _generate_help_text_for_command(self, command: Command) -> None:
-        """
-        Generate help text for a command using standard techniques or LLM if needed.
+    # --- Refactored Analysis Orchestration ---
 
-        Args:
-            command: The command to generate help text for.
-        """
-        # If we already have help text, do nothing
-        if command.help_text:
-            return
-
-        try:
-            # Try to get help text from standard method
-            if hasattr(command, "cli_tool") and command.cli_tool:
-                tool_name = getattr(command.cli_tool, "name", "")
-                if tool_name and command.name:
-                    # Determine if it's a subcommand
-                    parent_path = ""
-                    if (
-                        hasattr(command, "is_subcommand")
-                        and command.is_subcommand
-                        and hasattr(command, "parent_command_id")
-                        and command.parent_command_id
-                    ):
-                        # Find the parent command
-                        for cmd in command.cli_tool.commands:
-                            if hasattr(cmd, "id") and cmd.id == command.parent_command_id:
-                                parent_path = getattr(cmd, "name", "")
-                                break
-
-                    # Try to get the help text
-                    try:
-                        command.help_text = self.get_command_help_text(
-                            tool_name, command.name, parent_path=parent_path
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to get help text for {command.name}: {str(e)}")
-                        # Generate help text with LLM if normal method fails
-                        command.help_text = self._generate_help_text_with_llm(command)
-        except Exception as e:
-            logger.error(f"Failed to generate help text for {command.name}: {str(e)}")
-
-    def _generate_help_text_with_llm(self, command: Command) -> str:
-        """
-        Generate help text for a command using LLM when standard methods fail.
-
-        Args:
-            command: The command to generate help text for.
-
-        Returns:
-            Generated help text.
-        """
-        # Construct a prompt based on available information
-        tool_name = ""
-        if hasattr(command, "cli_tool") and command.cli_tool:
-            tool_name = getattr(command.cli_tool, "name", "")
-
-        # Get the command description if available
-        description = getattr(command, "description", "")
-        purpose = getattr(command, "purpose", "")
-
-        prompt = f"""
-        Create realistic help text for the command '{command.name}' from the CLI tool '{tool_name}'.
-
-        I don't have access to the actual help text, so I need you to generate it based on the following information:
-
-        Command name: {command.name}
-        Description: {description}
-        Purpose: {purpose}
-
-        The help text should include:
-        1. A description of what the command does
-        2. The command syntax
-        3. Available options and flags
-        4. Any required or optional arguments
-        5. Example usage
-
-        Format it to look like actual CLI help text, using appropriate spacing and formatting.
-        """
-
-        try:
-            # Generate the help text
-            help_text = self.llm_service.generate_text(prompt)
-            # Track token usage
-            self._track_llm_usage(self.llm_service)
-
-            return help_text
-        except Exception as e:
-            logger.error(f"Failed to generate help text with LLM: {str(e)}")
-            return f"Help text for {command.name} (generated placeholder)"
-
-    def _extract_options_and_args_with_llm(self, command: Command) -> None:
-        """
-        Extract options and arguments for a command using LLM.
-
-        Args:
-            command: The command to extract options and args for.
-        """
-        # Ensure we have help text
-        if not hasattr(command, "help_text") or not command.help_text:
-            logger.warning(f"Cannot extract options for {command.name}: No help text available")
-            return
-
-        tool_name = ""
-        if hasattr(command, "cli_tool") and command.cli_tool:
-            tool_name = getattr(command.cli_tool, "name", "")
-
-        logger.info(f"Extracting command structure for '{command.name}' using LLM...")
+    def _run_standard_analysis(
+        self, tool_name: str, version: Optional[str], max_commands: Optional[int]
+    ) -> CLITool:
+        """Runs the standard analysis phase."""
+        logger.info("Phase 1/4: Running standard analysis...")
         start_time = time.time()
-
-        # Define schema
-        schema = {
-            "type": "object",
-            "properties": {
-                "description": {"type": "string"},
-                "options": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "short_form": {"type": "string", "nullable": True},
-                            "long_form": {"type": "string", "nullable": True},
-                            "description": {"type": "string"},
-                            "required": {"type": "boolean"},
-                            "takes_value": {"type": "boolean"},
-                        },
-                        "required": ["name", "description"],
-                    },
-                },
-                "arguments": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "description": {"type": "string"},
-                            "required": {"type": "boolean"},
-                        },
-                        "required": ["name"],
-                    },
-                },
-                "examples": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "command_line": {"type": "string"},
-                            "description": {"type": "string", "nullable": True},
-                        },
-                        "required": ["command_line"],
-                    },
-                },
-                "subcommands": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "description": {"type": "string", "nullable": True},
-                        },
-                        "required": ["name"],
-                    },
-                },
-            },
-            "required": ["description"],
-        }
-
-        # Create the prompt
-        prompt = f"""
-        Analyze the following help text for the command '{command.name}' from the CLI tool '{tool_name}'.
-        Extract the command structure, including its options, arguments, examples, and subcommands.
-
-        Help text:
-        ```
-        {command.help_text[:3000]}
-        ```
-
-        Provide a structured analysis as JSON with:
-        - A concise description of what the command does
-        - All options/flags (both short and long forms if available)
-        - All positional or required arguments
-        - Example usages
-        - Any subcommands mentioned
-        """
-
         try:
-            # Generate the analysis
-            result = self.llm_service.generate_json(prompt, schema)
-            # Track token usage
-            self._track_llm_usage(self.llm_service)
-
-            # Log the extracted information
-            elapsed_time = time.time() - start_time
-            logger.info(
-                f"Extracted command structure for '{command.name}' in {elapsed_time:.2f} seconds"
+            cli_tool = self.standard_analyzer.analyze_cli_tool(
+                tool_name, version, max_commands=max_commands
             )
-
-            # Add description if available
-            if (
-                "description" in result
-                and result["description"]
-                and (not command.description or len(command.description) < 20)
-            ):
-                command.description = result["description"]
-
-            # Process options
-            options_count = 0
-            if "options" in result and isinstance(result["options"], list):
-                for option_data in result["options"]:
-                    if isinstance(option_data, dict):
-                        option = Option(
-                            command_id=command.id,
-                            name=option_data.get("name", ""),
-                            short_form=option_data.get("short_form"),
-                            long_form=option_data.get("long_form"),
-                            description=option_data.get("description"),
-                            required=option_data.get("required", False),
-                        )
-                        command.options.append(option)
-                        options_count += 1
-
-            # Process arguments
-            args_count = 0
-            if "arguments" in result and isinstance(result["arguments"], list):
-                for arg_data in result["arguments"]:
-                    if isinstance(arg_data, dict):
-                        argument = Argument(
-                            command_id=command.id,
-                            name=arg_data.get("name", ""),
-                            description=arg_data.get("description"),
-                            required=arg_data.get("required", False),
-                        )
-                        command.arguments.append(argument)
-                        args_count += 1
-
-            # Process examples
-            examples_count = 0
-            if "examples" in result and isinstance(result["examples"], list):
-                for example_data in result["examples"]:
-                    if isinstance(example_data, dict):
-                        example = Example(
-                            command_id=command.id,
-                            command_line=example_data.get("command_line", ""),
-                            description=example_data.get("description"),
-                        )
-                        command.examples.append(example)
-                        examples_count += 1
-
-            # Process subcommands
-            subcommands_count = 0
-            if "subcommands" in result and isinstance(result["subcommands"], list):
-                for subcmd_data in result["subcommands"]:
-                    if isinstance(subcmd_data, dict) and "name" in subcmd_data:
-                        subcommand_name = subcmd_data.get("name")
-                        # Check if this subcommand already exists
-                        existing_subcommand = None
-                        for cmd in command.cli_tool.commands:
-                            if (
-                                hasattr(cmd, "name")
-                                and cmd.name == subcommand_name
-                                and hasattr(cmd, "parent_command_id")
-                                and cmd.parent_command_id == command.id
-                            ):
-                                existing_subcommand = cmd
-                                break
-
-                        if not existing_subcommand:
-                            # Create a new subcommand
-                            subcommand = Command(
-                                cli_tool_id=command.cli_tool_id,
-                                name=subcommand_name,
-                                description=subcmd_data.get("description", ""),
-                                is_subcommand=True,
-                                parent_command_id=command.id,
-                            )
-                            command.cli_tool.commands.append(subcommand)
-                            subcommands_count += 1
-                        elif (
-                            existing_subcommand
-                            and not existing_subcommand.description
-                            and subcmd_data.get("description")
-                        ):
-                            # Update existing subcommand with description if missing
-                            existing_subcommand.description = subcmd_data.get("description")
-
-            # Log what we extracted
-            logger.info(
-                f"Extracted: {options_count} options, {args_count} arguments, {examples_count} examples, {subcommands_count} subcommands"
-            )
-
         except Exception as e:
-            logger.error(f"Failed to extract command structure for {command.name}: {str(e)}")
+            logger.error(f"Standard analysis failed for tool '{tool_name}': {e}", exc_info=True)
+            cli_tool = CLITool(name=tool_name, version=version or "unknown")
+            try:
+                cli_tool.help_text = self.get_tool_help_text(tool_name)
+            except Exception:
+                logger.error(f"Could not retrieve basic help text for '{tool_name}'. Analysis severely limited.")
+                cli_tool.help_text = f"Error retrieving help for {tool_name}"
+        logger.info(f"Standard analysis phase completed in {time.time() - start_time:.2f} seconds")
+        return cli_tool
+
+    def _enhance_tool_with_llm(self, cli_tool: CLITool) -> None:
+        """Enhances the top-level tool information using LLM."""
+        logger.info("Phase 2/4: Enhancing tool analysis with LLM...")
+        start_enhance_time = time.time()
+
+        # Enhance tool description
+        if cli_tool.help_text and (not cli_tool.description or len(cli_tool.description) < 10):
+            logger.info("Enhancing tool description...")
+            try:
+                cli_tool.description = self.llm_helper.enhance_description_with_llm(
+                    cli_tool.description, cli_tool.help_text, cli_tool.name
+                )
+                self._track_llm_usage()
+            except Exception as e:
+                logger.warning(f"Failed to enhance tool description: {e}")
+
+        # Analyze tool purpose and background
+        if cli_tool.help_text:
+            logger.info("Analyzing tool purpose and background...")
+            try:
+                purpose_analysis = self.llm_helper.analyze_tool_purpose(cli_tool.name, cli_tool.help_text)
+                self._track_llm_usage()
+                cli_tool.purpose = purpose_analysis.get("purpose", cli_tool.purpose or "")
+                cli_tool.background = purpose_analysis.get("background", cli_tool.background or "")
+                cli_tool.use_cases = purpose_analysis.get("use_cases", cli_tool.use_cases or [])
+                cli_tool.testing_considerations = purpose_analysis.get("testing_considerations", cli_tool.testing_considerations or [])
+            except Exception as e:
+                logger.warning(f"Failed to analyze tool purpose: {e}")
+
+        # Extract commands if standard analysis failed to find any
+        if not cli_tool.commands and cli_tool.help_text:
+            logger.info("No commands found by standard analysis. Attempting LLM extraction...")
+            self._extract_commands_with_llm(cli_tool) # Calls helper internally
+
+        logger.info(f"Tool enhancement completed in {time.time() - start_enhance_time:.2f} seconds")
+
+    def _enhance_commands_with_llm(self, cli_tool: CLITool) -> None:
+        """Enhances individual commands using LLM."""
+        if not cli_tool.commands:
+            logger.info("Phase 3/4: No commands found to enhance.")
+            return
+
+        logger.info("Phase 3/4: Enhancing individual commands...")
+        start_cmd_enhance_time = time.time()
+        enhancement_errors = 0
+        num_commands_to_process = len(cli_tool.commands)
+        for i, command in enumerate(cli_tool.commands):
+            cmd_name = getattr(command, "name", f"command_{i+1}")
+            logger.info(f"Enhancing command {i+1}/{num_commands_to_process}: {cmd_name}")
+            try:
+                # update_command_info handles ensuring help text, enhancing description,
+                # extracting structure, and analyzing purpose.
+                self.update_command_info(command)
+            except Exception as e:
+                # Error is logged within update_command_info
+                enhancement_errors += 1
+
+        if enhancement_errors > 0:
+            logger.warning(f"Encountered {enhancement_errors} errors during command enhancement.")
+        logger.info(f"Command enhancement completed in {time.time() - start_cmd_enhance_time:.2f} seconds")
+
+    def _analyze_relationships_with_llm(self, cli_tool: CLITool) -> None:
+        """Analyzes command relationships using LLM."""
+        if not cli_tool.commands:
+            logger.info("Phase 4/4: No commands found to analyze relationships.")
+            return
+
+        logger.info("Phase 4/4: Analyzing command relationships...")
+        start_rel_time = time.time()
+        try:
+            command_data = [
+                {"name": cmd.name, "description": cmd.description or ""}
+                for cmd in cli_tool.commands if hasattr(cmd, 'name')
+            ]
+            if command_data:
+                relationships = self.llm_helper.analyze_command_relationships(cli_tool.name, command_data)
+                self._track_llm_usage()
+                if relationships:
+                    add_relationship_analysis(cli_tool, relationships)
+                    self._apply_relationship_insights(cli_tool, relationships)
+            else:
+                 logger.warning("No valid command data to analyze relationships.")
+        except Exception as e:
+            logger.error(f"Failed to analyze command relationships: {str(e)}", exc_info=True)
+        logger.info(f"Relationship analysis completed in {time.time() - start_rel_time:.2f} seconds")
+
 
     def analyze_cli_tool(
         self, tool_name: str, version: Optional[str] = None, max_commands: Optional[int] = None
     ) -> CLITool:
         """
-        Analyze a CLI tool and extract its commands, options, and arguments with LLM enhancement.
-
-        Args:
-            tool_name: The name of the CLI tool to analyze.
-            version: Optional specific version of the tool to analyze.
-            max_commands: Maximum number of commands to analyze (default: automatically determined).
-
-        Returns:
-            A CLITool object with all extracted information.
-
-        Raises:
-            CommandExecutionError: If the tool cannot be executed.
-            ValidationError: If the tool information cannot be validated.
+        Analyze a CLI tool using standard methods and LLM enhancements.
         """
         logger.info(f"Starting LLM-enhanced analysis of CLI tool: {tool_name}")
         logger.info("Phase 1/4: Running standard analysis...")
 
-        # Reset token tracking for this analysis session
-        self.token_usage = TokenUsage()
+        self.token_usage = TokenUsage() # Reset token tracking
 
-        # First analyze with standard analyzer (enforcing command limit)
         start_time = time.time()
-        cli_tool = self.standard_analyzer.analyze_cli_tool(
-            tool_name, version, max_commands=max_commands
-        )
-        standard_time = time.time() - start_time
-        logger.info(f"Standard analysis completed in {standard_time:.2f} seconds")
-
         try:
-            logger.info("Phase 2/4: Enhancing analysis with LLM...")
-
-            # Enhance tool description with LLM
-            if cli_tool.help_text:
-                logger.info("Enhancing tool description using LLM...")
-                start_time = time.time()
-                cli_tool.description = self._enhance_description_with_llm(
-                    cli_tool.description, cli_tool.help_text
-                )
-                logger.info(
-                    f"Description enhancement completed in {time.time() - start_time:.2f} seconds"
-                )
-
-            # NEW: Analyze tool purpose and background
-            logger.info("Analyzing tool purpose and background...")
-            start_time = time.time()
-            purpose_analysis = self._analyze_tool_purpose(cli_tool)
-            cli_tool.purpose = purpose_analysis.get("purpose", "")
-            cli_tool.background = purpose_analysis.get("background", "")
-
-            # Convert use_cases and testing_considerations to proper lists if needed
-            if "use_cases" in purpose_analysis:
-                use_cases = purpose_analysis["use_cases"]
-                if isinstance(use_cases, str):
-                    cli_tool.use_cases = [use_cases]
-                else:
-                    cli_tool.use_cases = use_cases
-
-            if "testing_considerations" in purpose_analysis:
-                testing_considerations = purpose_analysis["testing_considerations"]
-                if isinstance(testing_considerations, str):
-                    cli_tool.testing_considerations = [testing_considerations]
-                else:
-                    cli_tool.testing_considerations = testing_considerations
-
-            logger.info(
-                f"Tool purpose analysis completed in {time.time() - start_time:.2f} seconds"
+            cli_tool = self.standard_analyzer.analyze_cli_tool(
+                tool_name, version, max_commands=max_commands
             )
+        except Exception as e:
+             logger.error(f"Standard analysis failed for tool '{tool_name}': {e}", exc_info=True)
+             # Create a minimal CLITool object to allow potential LLM recovery
+             cli_tool = CLITool(name=tool_name, version=version or "unknown")
+             try:
+                 # Try to get at least the basic help text
+                 cli_tool.help_text = self.get_tool_help_text(tool_name)
+             except Exception:
+                 logger.error(f"Could not retrieve even basic help text for '{tool_name}'. Analysis severely limited.")
+                 cli_tool.help_text = f"Error retrieving help for {tool_name}"
 
-            # If we don't have any commands detected but we have help text,
-            # try to extract commands using LLM
+        standard_time = time.time() - start_time
+        logger.info(f"Standard analysis phase completed in {standard_time:.2f} seconds")
+
+        # --- LLM Enhancement Phase ---
+        try:
+            logger.info("Phase 2/4: Enhancing tool analysis with LLM...")
+            start_enhance_time = time.time()
+
+            # Enhance tool description
+            if cli_tool.help_text and (not cli_tool.description or len(cli_tool.description) < 10):
+                logger.info("Enhancing tool description...")
+                try:
+                    cli_tool.description = self.llm_helper.enhance_description_with_llm(
+                        cli_tool.description, cli_tool.help_text, tool_name
+                    )
+                    self._track_llm_usage()
+                except Exception as e:
+                    logger.warning(f"Failed to enhance tool description: {e}")
+
+            # Analyze tool purpose and background
+            if cli_tool.help_text:
+                logger.info("Analyzing tool purpose and background...")
+                try:
+                    purpose_analysis = self.llm_helper.analyze_tool_purpose(cli_tool.name, cli_tool.help_text)
+                    self._track_llm_usage()
+                    cli_tool.purpose = purpose_analysis.get("purpose", cli_tool.purpose or "")
+                    cli_tool.background = purpose_analysis.get("background", cli_tool.background or "")
+                    cli_tool.use_cases = purpose_analysis.get("use_cases", cli_tool.use_cases or [])
+                    cli_tool.testing_considerations = purpose_analysis.get("testing_considerations", cli_tool.testing_considerations or [])
+                except Exception as e:
+                    logger.warning(f"Failed to analyze tool purpose: {e}")
+
+            # Extract commands if standard analysis failed to find any
             if not cli_tool.commands and cli_tool.help_text:
-                logger.info("No commands detected. Attempting to extract commands using LLM...")
-                start_time = time.time()
-                self._extract_commands_with_llm(cli_tool)
-                logger.info(
-                    f"Command extraction completed in {time.time() - start_time:.2f} seconds"
-                )
+                logger.info("No commands found by standard analysis. Attempting LLM extraction...")
+                self._extract_commands_with_llm(cli_tool) # Calls helper internally
 
-            # NEW: Phase 3/4: Enhance commands with purposes and missing details
+            logger.info(f"Tool enhancement completed in {time.time() - start_enhance_time:.2f} seconds")
+
+            # --- Command Enhancement Phase ---
             if cli_tool.commands:
-                logger.info("Phase 3/4: Enhancing commands with purposes and details...")
-                start_time = time.time()
-
-                # Keep track of errors during enhancement
+                logger.info("Phase 3/4: Enhancing individual commands...")
+                start_cmd_enhance_time = time.time()
                 enhancement_errors = 0
-
-                for command in cli_tool.commands:
+                num_commands_to_process = len(cli_tool.commands)
+                for i, command in enumerate(cli_tool.commands):
+                    cmd_name = getattr(command, "name", f"command_{i+1}")
+                    logger.info(f"Enhancing command {i+1}/{num_commands_to_process}: {cmd_name}")
                     try:
-                        if hasattr(command, "name"):
-                            logger.info(f"Analyzing purpose for command: {command.name}")
-                            command.purpose = self._analyze_subcommand_purpose(command)
-
-                            # Verify and complete command details
-                            self._verify_and_complete_command(command)
+                        # update_command_info now handles ensuring help text,
+                        # enhancing description, extracting structure, and analyzing purpose.
+                        self.update_command_info(command)
                     except Exception as e:
-                        cmd_name = getattr(command, "name", "unknown")
-                        logger.error(f"Error enhancing command {cmd_name}: {str(e)}")
+                        logger.error(f"Error enhancing command {cmd_name}: {str(e)}", exc_info=True)
                         enhancement_errors += 1
 
                 if enhancement_errors > 0:
-                    logger.warning(
-                        f"Encountered {enhancement_errors} errors during command enhancement"
-                    )
+                    logger.warning(f"Encountered {enhancement_errors} errors during command enhancement.")
+                logger.info(f"Command enhancement completed in {time.time() - start_cmd_enhance_time:.2f} seconds")
 
-                logger.info(
-                    f"Command enhancement completed in {time.time() - start_time:.2f} seconds"
-                )
-
-            # Analyze command relationships and add as metadata
+            # --- Relationship Analysis Phase ---
             if cli_tool.commands:
                 logger.info("Phase 4/4: Analyzing command relationships...")
-                start_time = time.time()
+                start_rel_time = time.time()
                 try:
-                    relationships = self._analyze_command_relationships(cli_tool)
-                    if relationships:
-                        # Use the helper function to add relationship analysis
-                        add_relationship_analysis(cli_tool, relationships)
-
-                        # Apply relationship insights to the command structure
-                        self._apply_relationship_insights(cli_tool, relationships)
-                    logger.info(
-                        f"Relationship analysis completed in {time.time() - start_time:.2f} seconds"
-                    )
+                    # Prepare command data for the helper
+                    command_data = [
+                        {"name": cmd.name, "description": cmd.description or ""}
+                        for cmd in cli_tool.commands if hasattr(cmd, 'name')
+                    ]
+                    if command_data:
+                        relationships = self.llm_helper.analyze_command_relationships(cli_tool.name, command_data)
+                        self._track_llm_usage()
+                        if relationships:
+                            add_relationship_analysis(cli_tool, relationships)
+                            self._apply_relationship_insights(cli_tool, relationships)
+                    else:
+                         logger.warning("No valid command data to analyze relationships.")
                 except Exception as e:
-                    logger.error(f"Failed to analyze command relationships: {str(e)}")
+                    logger.error(f"Failed to analyze command relationships: {str(e)}", exc_info=True)
+                logger.info(f"Relationship analysis completed in {time.time() - start_rel_time:.2f} seconds")
 
-            # Log the final token usage statistics and add to CLI tool
+            # --- Finalization ---
             logger.info(
                 f"LLM-enhanced analysis complete! Used {self.token_usage.total_tokens} tokens in "
                 f"{self.token_usage.api_calls} API calls (est. cost: ${self.token_usage.estimated_cost:.4f})"
             )
 
-            # Force a test call to ensure token tracking works
-            try:
-                logger.info("Making test LLM call to verify token tracking...")
-                test_response = self.llm_service.generate_text(
-                    "Summarize what the ping command does in one sentence."
-                )
-                logger.info(f"Test response: {test_response}")
-                logger.info(f"Updated token usage: {self.token_usage.total_tokens} tokens")
-            except Exception as e:
-                logger.error(f"Test LLM call failed: {e}")
-
-            # Transfer token usage data to the CLI tool
-            if hasattr(cli_tool, "meta_data"):
-                if cli_tool.meta_data is None:
-                    from testronaut.models.cli_tool import MetaData
-
-                    cli_tool.meta_data = MetaData()
-                cli_tool.meta_data.llm_usage = self.token_usage
-            else:
-                # Alternative approach if meta_data attribute is not accessible
-                cli_tool._token_usage = self.token_usage
+            # Add token usage to metadata
+            if not hasattr(cli_tool, "meta_data") or cli_tool.meta_data is None:
+                 cli_tool.meta_data = MetaData()
+            cli_tool.meta_data.llm_usage = self.token_usage
 
             return cli_tool
+
         except Exception as e:
-            logger.error(f"Failed to enhance CLI tool analysis with LLM: {str(e)}")
-            logger.info("Returning results from standard analysis")
-            return cli_tool
+            logger.error(f"Unexpected error during LLM enhancement phase for '{tool_name}': {str(e)}", exc_info=True)
+            logger.info("Returning potentially incomplete analysis results.")
+            # Ensure metadata exists before assigning token usage
+            if not hasattr(cli_tool, "meta_data") or cli_tool.meta_data is None:
+                 cli_tool.meta_data = MetaData()
+            cli_tool.meta_data.llm_usage = self.token_usage # Store usage even if enhancement failed
+            return cli_tool # Return the cli_tool object even if enhancement failed partially
+
+    # --- Internal Helper Methods ---
+
+    def _ensure_command_help_text(self, command: Command) -> None:
+        """Ensures command.help_text is populated, using standard or LLM methods."""
+        if command.help_text:
+            return
+
+        logger.info(f"Help text missing for '{command.name}'. Attempting retrieval/generation.")
+        try:
+            tool_name = getattr(command.cli_tool, "name", "unknown_tool")
+            # Determine parent path
+            parent_path = ""
+            if command.is_subcommand and command.parent_command_id:
+                 # Find parent command within the tool's command list
+                 parent_cmd = next((cmd for cmd in getattr(command.cli_tool, 'commands', []) if cmd.id == command.parent_command_id), None)
+                 if parent_cmd:
+                     parent_path = parent_cmd.name # Assuming simple hierarchy for now
+
+            # Try standard method first (which itself has LLM fallback)
+            command.help_text = self.get_command_help_text(tool_name, command.name, parent_path)
+            logger.info(f"Successfully retrieved/generated help text for '{command.name}'.")
+
+        except CommandExecutionError as e:
+            # This means both standard and its LLM fallback failed
+            logger.error(f"Failed to retrieve or generate help text for '{command.name}' even with fallback: {e}", exc_info=True)
+            command.help_text = f"Help text retrieval/generation failed for {command.name}" # Placeholder
+        except Exception as e:
+             logger.error(f"Unexpected error ensuring help text for '{command.name}': {e}", exc_info=True)
+             command.help_text = f"Error retrieving help text for {command.name}" # Placeholder
+
+
+    def _extract_structure_llm(self, command: Command) -> None:
+        """Extracts structure (options, args, etc.) using LLM helper."""
+        if not command.help_text:
+             logger.warning(f"Cannot extract structure for '{command.name}': No help text.")
+             return
+
+        try:
+            tool_name = getattr(command.cli_tool, "name", "unknown_tool")
+            structure_data = self.llm_helper.extract_structure_with_llm(
+                tool_name, command.name, command.help_text
+            )
+            self._track_llm_usage()
+
+            # Process extracted data (only add if not already present from standard analysis)
+            if structure_data:
+                # Update description if better
+                llm_desc = structure_data.get("description")
+                if llm_desc and (not command.description or len(command.description) < len(llm_desc)):
+                    command.description = llm_desc
+
+                # Add missing options
+                existing_options = {opt.name for opt in command.options} # Use name for comparison
+                if "options" in structure_data and isinstance(structure_data["options"], list):
+                    for opt_data in structure_data["options"]:
+                        if isinstance(opt_data, dict):
+                            opt_name = opt_data.get("name")
+                            if opt_name and opt_name not in existing_options:
+                                command.options.append(Option(
+                                    command_id=command.id,
+                                    name=opt_name,
+                                    short_form=opt_data.get("short_form"),
+                                    long_form=opt_data.get("long_form"),
+                                    description=opt_data.get("description"),
+                                    required=opt_data.get("required", False),
+                                    # takes_value=opt_data.get("takes_value") # Add if needed
+                                ))
+                                existing_options.add(opt_name)
+
+                # Add missing arguments
+                existing_args = {arg.name for arg in command.arguments}
+                if "arguments" in structure_data and isinstance(structure_data["arguments"], list):
+                     for i, arg_data in enumerate(structure_data["arguments"]):
+                         if isinstance(arg_data, dict):
+                             arg_name = arg_data.get("name")
+                             if arg_name and arg_name not in existing_args:
+                                 command.arguments.append(Argument(
+                                     command_id=command.id,
+                                     name=arg_name,
+                                     description=arg_data.get("description"),
+                                     required=arg_data.get("required", False),
+                                     position=len(command.arguments) # Append at the end
+                                 ))
+                                 existing_args.add(arg_name)
+
+                # Add missing examples (handled by update_command_info calling extract_examples)
+
+                # Add missing subcommands
+                if "subcommands" in structure_data and isinstance(structure_data["subcommands"], list):
+                    self._process_llm_subcommands(command, structure_data["subcommands"])
+
+        except Exception as e:
+            logger.error(f"Failed during LLM structure extraction for '{command.name}': {e}", exc_info=True)
+
 
     def _extract_commands_with_llm(self, cli_tool: CLITool) -> None:
         """
-        Extract commands using the LLM when standard extraction fails.
-
-        Args:
-            cli_tool: The CLI tool to extract commands for.
+        Extracts top-level commands using LLM helper when standard fails.
         """
-        schema = {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "The name of the command"},
-                    "description": {
-                        "type": "string",
-                        "description": "Brief description of what the command does",
-                    },
-                },
-                "required": ["name"],
-            },
-        }
+        if not cli_tool.help_text:
+             logger.warning(f"Cannot extract commands for '{cli_tool.name}': No help text.")
+             return
 
-        prompt = f"""
-        Based on the following help text for the CLI tool '{cli_tool.name}',
-        extract all available commands (or subcommands). Focus on identifying distinct commands
-        that users can execute.
-
-        Help text:
-        ```
-        {cli_tool.help_text[:3000] if cli_tool.help_text else "No help text available"}
-        ```
-        """
-
+        logger.info(f"Attempting to extract commands for '{cli_tool.name}' using LLM.")
         try:
-            commands_data = self.llm_service.generate_json(prompt, schema)
-            logger.debug(f"Extracted {len(commands_data)} commands with LLM")
+            # Use the structure extraction focused on commands
+            structure = self.llm_helper.extract_structure_with_llm(
+                cli_tool.name, cli_tool.name, cli_tool.help_text # Use tool name as command for top level
+            )
+            self._track_llm_usage()
 
-            # Create command models
-            for cmd_data in commands_data:
-                if isinstance(cmd_data, dict):
-                    command = Command(
-                        cli_tool_id=cli_tool.id,
-                        name=cmd_data.get("name", ""),
-                        description=cmd_data.get("description"),
+            if structure and "subcommands" in structure and isinstance(structure["subcommands"], list):
+                 logger.info(f"LLM identified {len(structure['subcommands'])} potential commands.")
+                 self._process_llm_subcommands(cli_tool, structure["subcommands"], is_top_level=True) # Process as top-level
+
+                 # Now update info for these newly found commands
+                 for command in cli_tool.commands:
+                     if not command.help_text: # Only update if needed
+                         self.update_command_info(command)
+            else:
+                 logger.warning(f"LLM did not identify any commands for '{cli_tool.name}' from help text.")
+
+        except Exception as e:
+            logger.error(f"Failed during LLM command extraction for '{cli_tool.name}': {e}", exc_info=True)
+
+
+    def _process_llm_subcommands(self, parent: Union[CLITool, Command], subcommands_data: List[Dict[str, Any]], is_top_level: bool = False) -> None:
+        """Helper to process subcommands identified by LLM."""
+        parent_id = parent.id if isinstance(parent, Command) else None
+        # Get the actual CLITool object, whether parent is the tool or a command within it
+        the_tool = parent if isinstance(parent, CLITool) else getattr(parent, "cli_tool", None)
+        if not the_tool:
+             logger.error(f"Could not determine CLITool object for parent {getattr(parent, 'name', 'unknown')}")
+             return # Cannot proceed without the tool object
+
+        tool_id = the_tool.id # Get tool ID from the tool object
+        existing_commands = getattr(the_tool, "commands", []) # Get commands from the tool object
+        commands_by_name = {cmd.name: cmd for cmd in existing_commands if hasattr(cmd, 'name')}
+
+        subcommands_added = 0
+        for subcmd_data in subcommands_data:
+            if isinstance(subcmd_data, dict):
+                subcommand_name = subcmd_data.get("name")
+                # Fix for Pylance Error Line 884: Check if subcommand_name is not None
+                if not subcommand_name:
+                    logger.warning("LLM identified a subcommand without a name, skipping.")
+                    continue
+
+                # Check if this command/subcommand already exists at the correct level
+                already_exists = False
+                if subcommand_name in commands_by_name:
+                    existing_cmd = commands_by_name[subcommand_name]
+                    # Check if it's correctly parented (or top-level)
+                    if (is_top_level and not getattr(existing_cmd, 'parent_command_id', None)) or \
+                       (not is_top_level and getattr(existing_cmd, 'parent_command_id', None) == parent_id):
+                        already_exists = True
+                        # Update description if LLM provided one and existing is empty
+                        if not existing_cmd.description and subcmd_data.get("description"):
+                            existing_cmd.description = subcmd_data.get("description")
+
+
+                if not already_exists:
+                    subcommand = Command(
+                        cli_tool_id=tool_id,
+                        name=subcommand_name,
+                        description=subcmd_data.get("description", ""),
+                        is_subcommand=not is_top_level,
+                        parent_command_id=parent_id,
                     )
-                    cli_tool.commands.append(command)
+                    existing_commands.append(subcommand) # Add to the tool's command list
+                    commands_by_name[subcommand_name] = subcommand # Add to lookup
+                    subcommands_added += 1
 
-            # Update each command with more detailed information
-            for command in cli_tool.commands:
-                self.update_command_info(command)
+        if subcommands_added > 0:
+             parent_name = getattr(parent, "name", "tool")
+             logger.info(f"Added {subcommands_added} new subcommands identified by LLM under '{parent_name}'.")
 
-        except (LLMServiceError, ValidationError) as e:
-            logger.warning(f"Failed to extract commands with LLM: {str(e)}")
 
     def _apply_relationship_insights(
         self, cli_tool: CLITool, relationships: Dict[str, Any]
     ) -> None:
         """
-        Apply relationship insights to the command structure.
-
-        Args:
-            cli_tool: The CLI tool to update.
-            relationships: The relationship information from LLM analysis.
+        Apply relationship insights (parent/child) to the command structure.
         """
-        # Create a dictionary of commands by name for easy lookup
-        commands_by_name = {cmd.name: cmd for cmd in cli_tool.commands}
+        commands_by_name = {cmd.name: cmd for cmd in cli_tool.commands if hasattr(cmd, 'name')}
 
-        # Apply parent-child relationships
         for relation in relationships.get("parent_child", []):
-            if not isinstance(relation, dict):
-                continue
-
+            if not isinstance(relation, dict): continue
             parent_name = relation.get("parent")
             child_name = relation.get("child")
 
-            # Skip if names are missing or invalid
-            if not parent_name or not child_name:
-                continue
-
-            # Skip if commands don't exist
-            if parent_name not in commands_by_name or child_name not in commands_by_name:
-                continue
+            if not parent_name or not child_name: continue
+            if parent_name not in commands_by_name or child_name not in commands_by_name: continue
 
             parent_cmd = commands_by_name[parent_name]
             child_cmd = commands_by_name[child_name]
 
-            # Update subcommand relationship if it doesn't already exist
-            if not child_cmd.is_subcommand and not child_cmd.parent_command_id:
+            # Update relationship if child is currently considered top-level or has wrong parent
+            if not child_cmd.is_subcommand or child_cmd.parent_command_id != parent_cmd.id:
+                logger.info(f"Applying relationship: Setting '{parent_name}' as parent of '{child_name}'.")
                 child_cmd.is_subcommand = True
                 child_cmd.parent_command_id = parent_cmd.id
+                # ORM relationships might update automatically, or might need explicit add/remove
+                # if hasattr(parent_cmd, 'subcommands') and child_cmd not in parent_cmd.subcommands:
+                #     parent_cmd.subcommands.append(child_cmd)
 
-                # Add to parent's subcommands list if using an ORM
-                if not any(subcmd.id == child_cmd.id for subcmd in parent_cmd.subcommands):
-                    parent_cmd.subcommands.append(child_cmd)
+    # --- Removed Private Methods (Moved to LLMAnalysisHelper) ---
+    # _generate_command_help_with_llm
+    # _enhance_description_with_llm
+    # _extract_examples_with_llm
+    # _analyze_command_semantics
+    # _analyze_command_relationships
+    # _extract_options_and_args_with_llm -> consolidated into _extract_structure_llm
+    # _generate_help_text_with_llm
+    # _extract_command_structure_with_llm -> consolidated into _extract_structure_llm
+    # _analyze_tool_purpose
+    # _analyze_subcommand_purpose
 
-    def _extract_command_structure_with_llm(
-        self, tool_name: str, command_name: str, help_text: str
-    ) -> Dict[str, Any]:
-        """
-        Extract command structure and information using LLM when regex patterns might fail.
-
-        Args:
-            tool_name: The name of the CLI tool.
-            command_name: The name of the command.
-            help_text: The help text to analyze.
-
-        Returns:
-            Dictionary with command structure information.
-        """
-        import time
-
-        logger.info(f"Extracting command structure for '{command_name}' using LLM...")
-        start_time = time.time()
-
-        # Build prompt for LLM
-        logger.debug("Building prompt for LLM command structure extraction...")
-        prompt = f"""
-        Analyze the following help text for the command '{tool_name} {command_name}' and extract its structure.
-
-        Extract the following information:
-        1. Description: What the command does
-        2. Options: All command-line options with their descriptions and whether they're required
-        3. Arguments: All positional arguments with their descriptions and whether they're required
-        4. Examples: Any usage examples shown
-        5. Subcommands: Any subcommands mentioned with their descriptions
-
-        Help text:
-        ```
-        {help_text[:3000]}  # Limiting to 3000 chars to avoid token limits
-        ```
-
-        Format your response as a structured JSON object.
-        """
-
-        # Define schema for the LLM response
-        schema = {
-            "type": "object",
-            "properties": {
-                "description": {"type": "string"},
-                "options": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "short_form": {"type": "string", "nullable": True},
-                            "long_form": {"type": "string", "nullable": True},
-                            "description": {"type": "string"},
-                            "required": {"type": "boolean"},
-                            "takes_value": {"type": "boolean"},
-                        },
-                        "required": ["name", "description"],
-                    },
-                },
-                "arguments": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "description": {"type": "string"},
-                            "required": {"type": "boolean"},
-                        },
-                        "required": ["name"],
-                    },
-                },
-                "examples": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "command_line": {"type": "string"},
-                            "description": {"type": "string", "nullable": True},
-                        },
-                        "required": ["command_line"],
-                    },
-                },
-                "subcommands": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "description": {"type": "string", "nullable": True},
-                        },
-                        "required": ["name"],
-                    },
-                },
-            },
-            "required": ["description"],
-        }
-
-        try:
-            # Generate structured JSON analysis
-            logger.debug("Calling LLM service for structured command extraction...")
-            result = self.llm_service.generate_json(prompt, schema)
-            elapsed_time = time.time() - start_time
-            logger.info(
-                f"Extracted command structure for '{command_name}' in {elapsed_time:.2f} seconds"
-            )
-
-            # Log summary of extracted information
-            options_count = len(result.get("options", []))
-            args_count = len(result.get("arguments", []))
-            examples_count = len(result.get("examples", []))
-            subcommands_count = len(result.get("subcommands", []))
-            logger.info(
-                f"Extracted: {options_count} options, {args_count} arguments, "
-                + f"{examples_count} examples, {subcommands_count} subcommands"
-            )
-
-            return result
-        except LLMServiceError:
-            # Fall back to text generation and parsing
-            logger.warning("Structured JSON generation failed, falling back to text extraction...")
-            try:
-                response = self.llm_service.generate_text(prompt)
-                result = self.result_processor.extract_json_from_text(response)
-                elapsed_time = time.time() - start_time
-                logger.info(
-                    f"Extracted command structure using text parsing in {elapsed_time:.2f} seconds"
-                )
-                return result
-            except (LLMServiceError, ValidationError) as e:
-                elapsed_time = time.time() - start_time
-                logger.warning(
-                    f"Failed to extract command structure with LLM after {elapsed_time:.2f} seconds: {str(e)}"
-                )
-                return {}
-
-    def process_examples(self, text: str) -> List[Dict[str, Any]]:
-        """
-        Process command examples from LLM response - a fallback method in case result_processor fails.
-
-        Args:
-            text: The LLM response text.
-
-        Returns:
-            List of example dictionaries.
-        """
-        examples: List[Dict[str, Any]] = []
-
-        # Try to extract structured examples first
-        try:
-            # Use result_processor instead of duplicating logic
-            json_data = self.result_processor.extract_json_from_text(text)
-            if isinstance(json_data, list):
-                # Ensure each example is properly formatted
-                for example in json_data:
-                    if isinstance(example, dict):
-                        examples.append(example)
-                    elif isinstance(example, str):
-                        examples.append({"command_line": example, "description": ""})
-                return examples
-            elif (
-                isinstance(json_data, dict)
-                and "examples" in json_data
-                and isinstance(json_data["examples"], list)
-            ):
-                # Ensure each example is properly formatted
-                for example in json_data["examples"]:
-                    if isinstance(example, dict):
-                        examples.append(example)
-                    elif isinstance(example, str):
-                        examples.append({"command_line": example, "description": ""})
-                return examples
-        except Exception as e:
-            logger.debug(f"JSON extraction failed: {str(e)}, falling back to regex")
-
-        # Fall back to regex-based extraction
-        example_pattern = (
-            r"(?:Example|Example \d+):?\s+(.*?\s+.*?)(?:\n|$)(?:Description:?\s+(.*?))?(?:\n\n|\Z)"
-        )
-        matches = re.findall(example_pattern, text, re.MULTILINE | re.DOTALL)
-
-        if matches:
-            for command_line, description in matches:
-                examples.append(
-                    {
-                        "command_line": command_line.strip(),
-                        "description": description.strip() if description else "",
-                    }
-                )
-
-            return examples
-
-        # Try another pattern for numbered examples
-        numbered_pattern = r"(\d+\.)\s+(.*?\s+.*?)(?:\n|$)(?:\s+-\s+(.*?))?(?:\n\n|\Z)"
-        matches = re.findall(numbered_pattern, text, re.MULTILINE | re.DOTALL)
-
-        if matches:
-            for _, command_line, description in matches:
-                examples.append(
-                    {
-                        "command_line": command_line.strip(),
-                        "description": description.strip() if description else "",
-                    }
-                )
-
-            return examples
-
-        # If all else fails and there are legitimate command lines, try to extract them
-        command_lines = re.findall(r"`([^`]+)`", text)
-        if command_lines:
-            for cmd in command_lines:
-                examples.append({"command_line": cmd.strip(), "description": ""})
-
-            return examples
-
-        # If we still couldn't extract examples, return an empty list instead of raising an error
-        logger.warning("Could not extract examples from LLM response, returning empty list")
-        return []
-
-    def update_command_info(self, command: Command) -> Command:
-        """
-        Update and enrich the information for a specific command, enhanced with LLM.
-
-        Args:
-            command: The command object to update.
-
-        Returns:
-            The updated command object with enriched information.
-
-        Raises:
-            CommandExecutionError: If the command cannot be executed.
-            ValidationError: If the command information cannot be validated.
-        """
-        logger.debug(f"Updating command info for {command.name}")
-
-        try:
-            # First try standard method
-            self.standard_analyzer.update_command_info(command)
-
-            # If we have a valid CLI tool but no tool help text, try to get it
-            if hasattr(command, "cli_tool") and command.cli_tool and not command.cli_tool.help_text:
-                try:
-                    command.cli_tool.help_text = self.get_tool_help_text(command.cli_tool.name)
-                except Exception as e:
-                    logger.warning(f"Failed to get tool help text: {str(e)}")
-
-            # If we don't have help text for the command, try to get it
-            if not command.help_text:
-                try:
-                    # Build command path for subcommands by traversing the parent chain
-                    command_path_parts: List[str] = []
-                    current_command = command
-
-                    # First, check if the command has a parent
-                    while (
-                        hasattr(current_command, "parent_command_id")
-                        and current_command.parent_command_id
-                    ):
-                        # Find the parent command by ID
-                        parent_command = None
-                        for cmd in command.cli_tool.commands:
-                            if hasattr(cmd, "id") and cmd.id == current_command.parent_command_id:
-                                parent_command = cmd
-                                break
-
-                        # If found, add to path and continue up the chain
-                        if parent_command and hasattr(parent_command, "name"):
-                            command_path_parts.insert(0, parent_command.name)
-                            current_command = parent_command
-                        else:
-                            break
-
-                    # Build the full command path
-                    command_path = " ".join(command_path_parts)
-
-                    # Get the help text from command execution
-                    command.help_text = self.get_command_help_text(
-                        command.cli_tool.name, command.name, command_path
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to get command help text: {str(e)}")
-
-            # Check if description is missing or too short
-            if not command.description or len(command.description) < 20:
-                try:
-                    command.description = self._enhance_description_with_llm(
-                        command.description, command.help_text or ""
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to enhance description with LLM: {str(e)}")
-
-            # Enhance with additional details using result_processor
-            return command
-        except Exception as e:
-            logger.error(f"Failed to update command info: {str(e)}")
-            return command
-
-    def _analyze_tool_purpose(self, cli_tool: CLITool) -> Dict[str, Any]:
-        """
-        Analyze the overall purpose of a CLI tool using LLM.
-
-        Args:
-            cli_tool: The CLI tool to analyze.
-
-        Returns:
-            Dictionary with purpose analysis information.
-        """
-        if not cli_tool.help_text:
-            return {}
-
-        prompt = CLIAnalysisPrompts.tool_purpose_analysis(cli_tool.name, cli_tool.help_text)
-
-        schema = {
-            "type": "object",
-            "properties": {
-                "purpose": {
-                    "type": "string",
-                    "description": "The main purpose of the tool",
-                },
-                "background": {
-                    "type": "string",
-                    "description": "Technical context for understanding the tool",
-                },
-                "use_cases": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Common use cases for the tool",
-                },
-                "testing_considerations": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Special considerations for testing",
-                },
-            },
-            "required": ["purpose"],
-        }
-
-        try:
-            # Try to get structured JSON analysis
-            analysis = self.llm_service.generate_json(prompt, schema)
-            logger.debug(f"Generated purpose analysis for tool: {cli_tool.name}")
-            return cast(Dict[str, Any], analysis)
-        except LLMServiceError:
-            # Fall back to text generation and processing
-            try:
-                response = self.llm_service.generate_text(prompt)
-                analysis = self.result_processor.process_tool_purpose_analysis(response)
-                return analysis
-            except (LLMServiceError, ValidationError) as e:
-                logger.warning(f"Failed to analyze tool purpose: {str(e)}")
-                return {}
-
-    def _analyze_subcommand_purpose(self, command: Command) -> str:
-        """
-        Analyze the purpose of a specific subcommand using LLM.
-
-        Args:
-            command: The command to analyze.
-
-        Returns:
-            String with the command's purpose.
-        """
-        if not command.help_text or not command.cli_tool:
-            return ""
-
-        prompt = CLIAnalysisPrompts.subcommand_purpose_analysis(
-            command.cli_tool.name, command.name, command.help_text
-        )
-
-        schema = {
-            "type": "object",
-            "properties": {
-                "purpose": {
-                    "type": "string",
-                    "description": "The specific purpose of this command",
-                },
-            },
-            "required": ["purpose"],
-        }
-
-        try:
-            analysis = self.llm_service.generate_json(prompt, schema)
-            logger.debug(f"Generated purpose analysis for command: {command.name}")
-            return cast(Dict[str, Any], analysis).get("purpose", "")
-        except LLMServiceError:
-            # Fall back to text generation
-            try:
-                response = self.llm_service.generate_text(prompt)
-                # Extract purpose from text response
-                return self.result_processor.extract_purpose(response)
-            except (LLMServiceError, ValidationError) as e:
-                logger.warning(f"Failed to analyze command purpose: {str(e)}")
-                return ""
+    # --- Removed Fallback Method ---
+    # process_examples -> Logic handled by helper/result_processor

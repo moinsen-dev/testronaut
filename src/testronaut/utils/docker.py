@@ -3,6 +3,7 @@ Docker Integration Utilities.
 
 This module provides utilities for managing Docker containers for test isolation.
 """
+# Keep necessary imports for DockerTestEnvironment
 import json
 import tempfile
 import uuid
@@ -13,597 +14,108 @@ from testronaut.utils.command import CommandRunner
 from testronaut.utils.errors import DockerError
 from testronaut.utils.logging import get_logger
 
+# Import the new specific client classes
+from .docker_client import (
+    SystemClient,
+    ImageClient,
+    ContainerClient,
+    NetworkClient,
+    VolumeClient,
+)
+
 # Initialize logger
 logger = get_logger(__name__)
 
 
 class DockerClient:
-    """Client for managing Docker containers."""
+    """
+    Facade for interacting with Docker resources.
+
+    Instantiates and provides access to specific clients for managing
+    containers, images, networks, volumes, and system status.
+    """
 
     def __init__(self, command_runner: Optional[CommandRunner] = None):
         """
-        Initialize the Docker client.
+        Initialize the Docker client facade.
 
         Args:
             command_runner: Command runner for executing Docker commands.
+                            If None, a default one will be created.
         """
-        self.command_runner = command_runner or CommandRunner()
+        runner = command_runner or CommandRunner()
+        self.system = SystemClient(runner)
+        self.images = ImageClient(runner)
+        self.containers = ContainerClient(runner)
+        self.networks = NetworkClient(runner)
+        self.volumes = VolumeClient(runner)
 
-        # Check if Docker is available
-        if not self.is_docker_available():
-            logger.warning("Docker is not available on the system")
+        # Perform initial check
+        if not self.system.is_docker_available():
+            # Logged within is_docker_available
+            pass
+        else:
+            # Optionally check daemon status on init, but might slow down startup
+            # try:
+            #     self.system.check_docker_status()
+            # except DockerError as e:
+            #     logger.warning(f"Docker available but daemon check failed: {e}")
+            pass
+
+    # --- Convenience Methods (delegating to specific clients) ---
 
     def is_docker_available(self) -> bool:
-        """
-        Check if Docker is available on the system.
-
-        Returns:
-            True if Docker is available, False otherwise.
-        """
-        return self.command_runner.is_command_available("docker")
+        """Check if Docker command is available."""
+        return self.system.is_docker_available()
 
     def check_docker_status(self) -> Dict[str, Any]:
-        """
-        Check the status of the Docker daemon.
-
-        Returns:
-            A dictionary with information about the Docker daemon.
-
-        Raises:
-            DockerError: If Docker is not available or the status check fails.
-        """
-        if not self.is_docker_available():
-            raise DockerError(
-                "Docker is not available on the system",
-                details={"solution": "Install Docker and ensure it's in the PATH"}
-            )
-
-        try:
-            # Run docker info command
-            result = self.command_runner.run(
-                ["docker", "info", "--format", "{{json .}}"],
-                check=True
-            )
-
-            # Parse JSON output
-            info = json.loads(result.output)
-
-            # Check if Docker daemon is running
-            if not info.get("ServerVersion"):
-                raise DockerError(
-                    "Docker daemon is not running",
-                    details={"output": result.output}
-                )
-
-            return info
-
-        except json.JSONDecodeError as e:
-            raise DockerError(
-                "Failed to parse Docker info output",
-                details={"error": str(e), "output": result.output if 'result' in locals() else None}
-            ) from e
-
-        except Exception as e:
-            raise DockerError(
-                "Failed to check Docker status",
-                details={"error": str(e)}
-            ) from e
+        """Check Docker daemon status."""
+        return self.system.check_docker_status()
 
     def pull_image(self, image: str, quiet: bool = False) -> None:
-        """
-        Pull a Docker image.
+        """Pull a Docker image."""
+        self.images.pull_image(image, quiet)
 
-        Args:
-            image: The Docker image to pull.
-            quiet: Whether to suppress output.
-
-        Raises:
-            DockerError: If the image pull fails.
-        """
-        try:
-            command = ["docker", "pull", image]
-            if quiet:
-                command.append("--quiet")
-
-            logger.info(f"Pulling Docker image: {image}")
-            result = self.command_runner.run(
-                command,
-                check=True
-            )
-
-            logger.info(f"Docker image pulled: {image}")
-
-        except Exception as e:
-            raise DockerError(
-                f"Failed to pull Docker image: {image}",
-                details={"error": str(e)}
-            ) from e
-
-    def run_container(
-        self,
-        image: str,
-        command: Optional[Union[str, List[str]]] = None,
-        environment: Optional[Dict[str, str]] = None,
-        volumes: Optional[Dict[str, str]] = None,
-        work_dir: Optional[Union[str, Path]] = None,
-        network: Optional[str] = None,
-        entrypoint: Optional[Union[str, List[str]]] = None,
-        container_name: Optional[str] = None,
-        remove: bool = True,
-        tty: bool = False,
-        interactive: bool = False,
-        detach: bool = False,
-        pull: bool = False,
-        timeout: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """
-        Run a Docker container.
-
-        Args:
-            image: The Docker image to run.
-            command: The command to run in the container.
-            environment: Environment variables for the container.
-            volumes: Volumes to mount in the container.
-            work_dir: Working directory in the container.
-            network: Docker network to connect the container to.
-            entrypoint: Entrypoint for the container.
-            container_name: Name for the container.
-            remove: Whether to remove the container after it exits.
-            tty: Whether to allocate a TTY.
-            interactive: Whether to keep STDIN open.
-            detach: Whether to run the container in the background.
-            pull: Whether to pull the image before running.
-            timeout: Timeout for the container in seconds.
-
-        Returns:
-            A dictionary with information about the container.
-
-        Raises:
-            DockerError: If the container run fails.
-        """
-        # Ensure Docker is available
-        if not self.is_docker_available():
-            raise DockerError(
-                "Docker is not available on the system",
-                details={"solution": "Install Docker and ensure it's in the PATH"}
-            )
-
-        # Generate a container name if not provided
-        if not container_name:
-            container_name = f"testronaut-{uuid.uuid4().hex[:8]}"
-
-        # Pull the image if requested
-        if pull:
-            self.pull_image(image, quiet=True)
-
-        try:
-            # Prepare docker run command
-            docker_cmd = ["docker", "run"]
-
-            # Add options
-            if remove:
-                docker_cmd.append("--rm")
-
-            if tty:
-                docker_cmd.append("--tty")
-
-            if interactive:
-                docker_cmd.append("--interactive")
-
-            if detach:
-                docker_cmd.append("--detach")
-
-            if container_name:
-                docker_cmd.extend(["--name", container_name])
-
-            # Add environment variables
-            if environment:
-                for key, value in environment.items():
-                    docker_cmd.extend(["--env", f"{key}={value}"])
-
-            # Add volumes
-            if volumes:
-                for host_path, container_path in volumes.items():
-                    docker_cmd.extend(["--volume", f"{host_path}:{container_path}"])
-
-            # Add working directory
-            if work_dir:
-                docker_cmd.extend(["--workdir", str(work_dir)])
-
-            # Add network
-            if network:
-                docker_cmd.extend(["--network", network])
-
-            # Add entrypoint
-            if entrypoint:
-                if isinstance(entrypoint, list):
-                    docker_cmd.extend(["--entrypoint", entrypoint[0]])
-                    if len(entrypoint) > 1:
-                        command = entrypoint[1:]
-                else:
-                    docker_cmd.extend(["--entrypoint", entrypoint])
-
-            # Add image
-            docker_cmd.append(image)
-
-            # Add command
-            if command:
-                if isinstance(command, list):
-                    docker_cmd.extend(command)
-                else:
-                    docker_cmd.append(command)
-
-            # Log the Docker run command
-            logger.debug(
-                "Running Docker container",
-                image=image,
-                container_name=container_name,
-                command=command,
-                detach=detach
-            )
-
-            # Run the container
-            result = self.command_runner.run(
-                docker_cmd,
-                timeout=timeout,
-                check=True
-            )
-
-            # Get container ID if detached
-            container_id = result.output.strip() if detach else None
-
-            # Prepare result
-            container_info = {
-                "container_name": container_name,
-                "container_id": container_id,
-                "image": image,
-                "command": command,
-                "exit_code": result.return_code,
-                "output": result.output,
-                "error": result.error,
-                "duration_ms": result.duration_ms,
-                "detached": detach
-            }
-
-            logger.debug(
-                "Docker container run completed",
-                container_name=container_name,
-                container_id=container_id,
-                exit_code=result.return_code,
-                duration_ms=result.duration_ms
-            )
-
-            return container_info
-
-        except Exception as e:
-            raise DockerError(
-                f"Failed to run Docker container: {container_name}",
-                details={
-                    "error": str(e),
-                    "image": image,
-                    "command": command,
-                    "container_name": container_name
-                }
-            ) from e
+    def run_container(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        """Run a Docker container."""
+        # Handle the 'pull' argument which now belongs to ImageClient
+        pull = kwargs.pop('pull', False)
+        image = kwargs.get('image')
+        if pull and image:
+            self.pull_image(image, quiet=True) # Pull quietly before running
+        return self.containers.run_container(*args, **kwargs)
 
     def stop_container(self, container_id: str, timeout: Optional[int] = None) -> None:
-        """
-        Stop a Docker container.
-
-        Args:
-            container_id: The ID or name of the container to stop.
-            timeout: Timeout in seconds before killing the container.
-
-        Raises:
-            DockerError: If the container stop fails.
-        """
-        try:
-            command = ["docker", "stop"]
-            if timeout is not None:
-                command.extend(["--time", str(timeout)])
-            command.append(container_id)
-
-            logger.debug(f"Stopping Docker container: {container_id}")
-            result = self.command_runner.run(
-                command,
-                check=True
-            )
-
-            logger.debug(f"Docker container stopped: {container_id}")
-
-        except Exception as e:
-            raise DockerError(
-                f"Failed to stop Docker container: {container_id}",
-                details={"error": str(e)}
-            ) from e
+        """Stop a Docker container."""
+        self.containers.stop_container(container_id, timeout)
 
     def remove_container(self, container_id: str, force: bool = False) -> None:
-        """
-        Remove a Docker container.
+        """Remove a Docker container."""
+        self.containers.remove_container(container_id, force)
 
-        Args:
-            container_id: The ID or name of the container to remove.
-            force: Whether to force removal of the container.
-
-        Raises:
-            DockerError: If the container removal fails.
-        """
-        try:
-            command = ["docker", "rm"]
-            if force:
-                command.append("--force")
-            command.append(container_id)
-
-            logger.debug(f"Removing Docker container: {container_id}")
-            result = self.command_runner.run(
-                command,
-                check=True
-            )
-
-            logger.debug(f"Docker container removed: {container_id}")
-
-        except Exception as e:
-            raise DockerError(
-                f"Failed to remove Docker container: {container_id}",
-                details={"error": str(e)}
-            ) from e
-
-    def create_network(
-        self,
-        name: Optional[str] = None,
-        driver: str = "bridge",
-        subnet: Optional[str] = None,
-        gateway: Optional[str] = None
-    ) -> str:
-        """
-        Create a Docker network.
-
-        Args:
-            name: The name of the network.
-            driver: The network driver.
-            subnet: The subnet for the network.
-            gateway: The gateway for the network.
-
-        Returns:
-            The ID of the created network.
-
-        Raises:
-            DockerError: If the network creation fails.
-        """
-        try:
-            # Generate a network name if not provided
-            if not name:
-                name = f"testronaut-network-{uuid.uuid4().hex[:8]}"
-
-            # Prepare network create command
-            command = ["docker", "network", "create", "--driver", driver]
-
-            # Add subnet and gateway if provided
-            if subnet:
-                command.extend(["--subnet", subnet])
-
-            if gateway:
-                command.extend(["--gateway", gateway])
-
-            # Add network name
-            command.append(name)
-
-            logger.debug(f"Creating Docker network: {name}")
-            result = self.command_runner.run(
-                command,
-                check=True
-            )
-
-            # Get network ID
-            network_id = result.output.strip()
-
-            logger.debug(f"Docker network created: {name} ({network_id})")
-
-            return network_id
-
-        except Exception as e:
-            raise DockerError(
-                f"Failed to create Docker network: {name}",
-                details={"error": str(e)}
-            ) from e
+    def create_network(self, *args: Any, **kwargs: Any) -> str:
+        """Create a Docker network."""
+        return self.networks.create_network(*args, **kwargs)
 
     def remove_network(self, network_id: str) -> None:
-        """
-        Remove a Docker network.
+        """Remove a Docker network."""
+        self.networks.remove_network(network_id)
 
-        Args:
-            network_id: The ID or name of the network to remove.
-
-        Raises:
-            DockerError: If the network removal fails.
-        """
-        try:
-            command = ["docker", "network", "rm", network_id]
-
-            logger.debug(f"Removing Docker network: {network_id}")
-            result = self.command_runner.run(
-                command,
-                check=True
-            )
-
-            logger.debug(f"Docker network removed: {network_id}")
-
-        except Exception as e:
-            raise DockerError(
-                f"Failed to remove Docker network: {network_id}",
-                details={"error": str(e)}
-            ) from e
-
-    def create_volume(self, name: Optional[str] = None) -> str:
-        """
-        Create a Docker volume.
-
-        Args:
-            name: The name of the volume.
-
-        Returns:
-            The name of the created volume.
-
-        Raises:
-            DockerError: If the volume creation fails.
-        """
-        try:
-            # Generate a volume name if not provided
-            if not name:
-                name = f"testronaut-volume-{uuid.uuid4().hex[:8]}"
-
-            # Prepare volume create command
-            command = ["docker", "volume", "create", name]
-
-            logger.debug(f"Creating Docker volume: {name}")
-            result = self.command_runner.run(
-                command,
-                check=True
-            )
-
-            # Get volume name
-            volume_name = result.output.strip()
-
-            logger.debug(f"Docker volume created: {volume_name}")
-
-            return volume_name
-
-        except Exception as e:
-            raise DockerError(
-                f"Failed to create Docker volume: {name}",
-                details={"error": str(e)}
-            ) from e
+    def create_volume(self, *args: Any, **kwargs: Any) -> str:
+        """Create a Docker volume."""
+        return self.volumes.create_volume(*args, **kwargs)
 
     def remove_volume(self, volume_name: str, force: bool = False) -> None:
-        """
-        Remove a Docker volume.
+        """Remove a Docker volume."""
+        self.volumes.remove_volume(volume_name, force)
 
-        Args:
-            volume_name: The name of the volume to remove.
-            force: Whether to force removal of the volume.
+    def copy_to_container(self, *args: Any, **kwargs: Any) -> None:
+        """Copy files/dirs to a container."""
+        self.containers.copy_to_container(*args, **kwargs)
 
-        Raises:
-            DockerError: If the volume removal fails.
-        """
-        try:
-            command = ["docker", "volume", "rm"]
-            if force:
-                command.append("--force")
-            command.append(volume_name)
-
-            logger.debug(f"Removing Docker volume: {volume_name}")
-            result = self.command_runner.run(
-                command,
-                check=True
-            )
-
-            logger.debug(f"Docker volume removed: {volume_name}")
-
-        except Exception as e:
-            raise DockerError(
-                f"Failed to remove Docker volume: {volume_name}",
-                details={"error": str(e)}
-            ) from e
-
-    def copy_to_container(
-        self,
-        container_id: str,
-        source: Union[str, Path],
-        destination: str
-    ) -> None:
-        """
-        Copy a file or directory to a container.
-
-        Args:
-            container_id: The ID or name of the container.
-            source: The source file or directory on the host.
-            destination: The destination path in the container.
-
-        Raises:
-            DockerError: If the copy operation fails.
-        """
-        try:
-            # Prepare cp command
-            command = ["docker", "cp", str(source), f"{container_id}:{destination}"]
-
-            logger.debug(
-                "Copying to Docker container",
-                container_id=container_id,
-                source=source,
-                destination=destination
-            )
-
-            result = self.command_runner.run(
-                command,
-                check=True
-            )
-
-            logger.debug(
-                "Copied to Docker container",
-                container_id=container_id,
-                source=source,
-                destination=destination
-            )
-
-        except Exception as e:
-            raise DockerError(
-                f"Failed to copy to Docker container: {container_id}",
-                details={
-                    "error": str(e),
-                    "source": str(source),
-                    "destination": destination
-                }
-            ) from e
-
-    def copy_from_container(
-        self,
-        container_id: str,
-        source: str,
-        destination: Union[str, Path]
-    ) -> None:
-        """
-        Copy a file or directory from a container.
-
-        Args:
-            container_id: The ID or name of the container.
-            source: The source path in the container.
-            destination: The destination file or directory on the host.
-
-        Raises:
-            DockerError: If the copy operation fails.
-        """
-        try:
-            # Prepare cp command
-            command = ["docker", "cp", f"{container_id}:{source}", str(destination)]
-
-            logger.debug(
-                "Copying from Docker container",
-                container_id=container_id,
-                source=source,
-                destination=destination
-            )
-
-            result = self.command_runner.run(
-                command,
-                check=True
-            )
-
-            logger.debug(
-                "Copied from Docker container",
-                container_id=container_id,
-                source=source,
-                destination=destination
-            )
-
-        except Exception as e:
-            raise DockerError(
-                f"Failed to copy from Docker container: {container_id}",
-                details={
-                    "error": str(e),
-                    "source": source,
-                    "destination": str(destination)
-                }
-            ) from e
+    def copy_from_container(self, *args: Any, **kwargs: Any) -> None:
+        """Copy files/dirs from a container."""
+        self.containers.copy_from_container(*args, **kwargs)
 
 
 class DockerTestEnvironment:
@@ -630,22 +142,25 @@ class DockerTestEnvironment:
             pull_image: Whether to pull the image before running containers.
         """
         self.image = image
+        # Use the facade DockerClient
         self.docker_client = docker_client or DockerClient()
         self.base_work_dir = Path(base_work_dir) if base_work_dir else None
-        self.network = network
+        self.network_name = network # Store provided network name
         self.environment = environment or {}
         self.pull_image = pull_image
 
         # Generated resources
-        self._network_id: Optional[str] = None
+        self._managed_network_id: Optional[str] = None # ID if we create it
         self._work_dir: Optional[Path] = None
-        self._volumes: Dict[str, str] = {}
-        self._containers: Dict[str, str] = {}
+        # Volumes are not explicitly managed by this class currently
+        # self._volumes: Dict[str, str] = {}
+        self._containers: Dict[str, str] = {} # Maps test name to container ID/Name
 
-        # Check Docker availability
+        # Check Docker availability via the facade
         if not self.docker_client.is_docker_available():
+            # Error logged by client
             raise DockerError(
-                "Docker is not available on the system",
+                "Docker is not available or not running.",
                 details={"solution": "Install Docker and ensure it's in the PATH"}
             )
 
@@ -667,21 +182,26 @@ class DockerTestEnvironment:
                 self._work_dir = self.base_work_dir
                 self._work_dir.mkdir(parents=True, exist_ok=True)
 
-            # Create a network if needed
-            if self.network is None:
-                self._network_id = self.docker_client.create_network()
-                self.network = self._network_id
+            # Create a network if not provided
+            if self.network_name is None:
+                # Use the specific network client via the facade
+                self._managed_network_id = self.docker_client.create_network()
+                self.network_name = self._managed_network_id # Use the created ID/Name
+            else:
+                # If a network name was provided, ensure it exists? (Optional check)
+                pass
 
-            # Pull the image if requested
+            # Pull the image if requested (using facade)
             if self.pull_image:
-                self.docker_client.pull_image(self.image)
+                self.docker_client.pull_image(self.image, quiet=True)
 
+            # Return environment information
             # Return environment information
             return {
                 "image": self.image,
                 "work_dir": str(self._work_dir),
-                "network": self.network,
-                "managed_network": self._network_id is not None,
+                "network": self.network_name, # Return the network name/ID being used
+                "managed_network": self._managed_network_id is not None,
                 "environment": self.environment
             }
 
@@ -747,9 +267,9 @@ class DockerTestEnvironment:
                 environment=merged_env,
                 volumes=volumes,
                 work_dir=work_dir or "/workspace",
-                network=self.network,
+                network=self.network_name, # Use the assigned network name/ID
                 container_name=name,
-                remove=True,
+                remove=True, # Keep removing test containers by default
                 timeout=timeout
             )
 
@@ -841,19 +361,20 @@ class DockerTestEnvironment:
             except Exception as e:
                 errors.append(f"Failed to remove container {name}: {str(e)}")
 
-        # Remove network if we created it
-        if self._network_id:
-            try:
-                self.docker_client.remove_network(self._network_id)
-            except Exception as e:
-                errors.append(f"Failed to remove network {self._network_id}: {str(e)}")
+            # Remove network if we created it
+            if self._managed_network_id:
+                try:
+                    # Use facade to remove network
+                    self.docker_client.remove_network(self._managed_network_id)
+                except Exception as e:
+                    errors.append(f"Failed to remove managed network {self._managed_network_id}: {str(e)}")
 
-        # Remove volumes
-        for name in self._volumes.keys():
-            try:
-                self.docker_client.remove_volume(name)
-            except Exception as e:
-                errors.append(f"Failed to remove volume {name}: {str(e)}")
+            # Volumes are not explicitly managed/created by this class, so don't remove them here
+            # for name in self._volumes.keys():
+            #     try:
+            #         self.docker_client.remove_volume(name)
+            #     except Exception as e:
+            #         errors.append(f"Failed to remove volume {name}: {str(e)}")
 
         # Remove work directory if we created it
         if self._work_dir and self.base_work_dir is None:
@@ -864,10 +385,11 @@ class DockerTestEnvironment:
                 errors.append(f"Failed to remove work directory {self._work_dir}: {str(e)}")
 
         # Reset state
-        self._network_id = None
-        self._work_dir = None
-        self._volumes = {}
-        self._containers = {}
+            # Reset state
+            self._managed_network_id = None
+            self._work_dir = None
+            # self._volumes = {}
+            self._containers = {}
 
         # Report errors
         if errors:

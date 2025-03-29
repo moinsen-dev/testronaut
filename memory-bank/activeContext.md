@@ -50,7 +50,8 @@ We are developing the following components:
 
 ## Next Immediate Steps
 
-1.  **Phase 5:** Define `TestPlan`/`TestCase` models, `TestGenerator` interface.
+1.  **Refactoring:** Review and refactor identified files for code quality improvements (see list below).
+2.  **Phase 5:** Define `TestPlan`/`TestCase` models, `TestGenerator` interface.
 2.  **LLM:** Complete implementation of `DefaultLLMManager` methods (delegation, prompting).
 3.  **LLM:** Complete implementation of `LlamaCppProvider` methods.
 4.  **LLM:** Add configuration handling for passing settings to the provider.
@@ -125,6 +126,9 @@ We are now ready to move to Phase 005 - Test Plan Generator implementation.
 23. **Fixed `DefaultLLMManager` initialization logic.**
 24. **Fixed `LlamaCppProvider` duplicate `verbose` argument error.**
 25. **Fixed `LLMManager` protocol definition and related type errors.**
+26. **Fixed `ImportError: cannot import name 'settings'` in `cli/commands/config.py` by removing unused import.**
+27. **Fixed `ImportError: cannot import name 'settings'` in `llm/utils.py` by using `get_settings()` function.**
+28. **Refactored large modules:** Extracted components from `cli/commands/config.py`, `analyzers/llm_enhanced_analyzer.py`, `analyzers/standard_analyzer.py`, `utils/docker.py`, and `ui/browser.py` into smaller, more focused modules/classes.
 
 ## Current Tasks
 
@@ -165,6 +169,31 @@ We are now ready to move to Phase 005 - Test Plan Generator implementation.
 5. Testing (Core LLM)
    - [ ] Add unit/integration tests for LLM Manager, LlamaCppProvider, MockProvider.
 
+### Code Quality Refactoring Candidates (Ongoing)
+
+*   **High Priority (Completed/Reviewed):**
+    *   `src/testronaut/config/__init__.py` (Reviewed - OK)
+    *   `src/testronaut/utils/llm/__init__.py` (Reviewed - OK)
+    *   `src/testronaut/utils/logging/__init__.py` (Reviewed - OK)
+    *   `src/testronaut/analyzers/llm_enhanced_analyzer.py` (✅ Refactored)
+    *   `src/testronaut/analyzers/standard_analyzer.py` (✅ Refactored)
+    *   `src/testronaut/utils/docker.py` (✅ Refactored)
+    *   `src/testronaut/ui/browser.py` (✅ Refactored)
+    *   `src/testronaut/cli/commands/config.py` (✅ Refactored)
+*   **Medium Priority (Completed/Reviewed):**
+    *   `src/testronaut/utils/errors/__init__.py` (Reviewed - OK)
+    *   `src/testronaut/factory/__init__.py` (Reviewed - OK)
+    *   `src/testronaut/cli/commands/analyze_commands.py` (✅ Refactored)
+    *   `src/testronaut/utils/llm/result_processor.py` (Reviewed - OK)
+    *   `src/testronaut/utils/command.py` (Reviewed - OK)
+    *   `src/testronaut/ui/repository.py` (Reviewed - OK)
+    *   `src/testronaut/models/cli_tool.py` (Reviewed - OK)
+*   **Low Priority (Review/Organize):**
+    *   `src/testronaut/migrations/__init__.py` (Review init)
+    *   `src/testronaut/utils/llm/providers/openai.py` (Large provider - Deferred)
+    *   `src/testronaut/utils/llm/prompts.py` (Large prompts file - Deferred)
+    *   `src/testronaut/utils/llm/llm_service.py` (Large service file - Deferred)
+
 ## Decisions & Considerations
 
 ### Technology Decisions
@@ -199,6 +228,7 @@ We are now ready to move to Phase 005 - Test Plan Generator implementation.
 2. **Interface Design**: Creating flexible yet type-safe interfaces
 3. **Error Handling**: Designing a comprehensive error handling system
 4. **Testing Strategy**: Developing effective tests for abstract interfaces
+5. **Pylance False Positive**: A persistent warning in `cli/commands/config.py` regarding potential `None` iteration, suppressed with `# type: ignore`.
 
 ## Active Discussions
 1. Best approach for dependency injection in Python

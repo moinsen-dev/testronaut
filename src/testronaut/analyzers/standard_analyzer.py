@@ -5,10 +5,12 @@ This module provides a standard implementation of the CLI analyzer interface.
 """
 
 import re
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set # Keep Set for processed_commands
 
 from testronaut.interfaces import CLIAnalyzer
 from testronaut.models import Argument, CLITool, Command, Example, Option
+# Import the new parser
+from .help_parser import HelpTextParser
 from testronaut.utils.command import CommandRunner
 from testronaut.utils.errors import CommandExecutionError
 from testronaut.utils.logging import get_logger
@@ -30,6 +32,8 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         self.command_runner = command_runner or CommandRunner()
         # Common help options across many CLI tools
         self.help_options = ["--help", "-h", "help"]
+        # Instantiate the parser
+        self.help_parser = HelpTextParser()
 
     def verify_tool_installation(self, tool_name: str) -> bool:
         """
@@ -171,282 +175,46 @@ class StandardCLIAnalyzer(CLIAnalyzer):
 
         return None
 
-    def extract_commands(self, tool_name: str, help_text: str) -> List[Dict[str, Any]]:
-        """
-        Extract commands from the help text of a CLI tool.
-
-        Args:
-            tool_name: The name of the CLI tool.
-            help_text: The help text of the tool.
-
-        Returns:
-            A list of dictionaries with command information.
-        """
-        logger.debug(f"Extracting commands for tool: {tool_name}")
-        commands = []
-        existing_cmd_names = set()  # Track command names to avoid duplicates
-
-        # Look for the "Commands" section in the help text
-        # This pattern works for rich-formatted CLI help (like Typer with rich formatting)
-        commands_section_match = re.search(
-            r"Commands[^\n]*\n(.*?)(?:\n\n|\Z)", help_text, re.DOTALL
-        )
-
-        if commands_section_match:
-            commands_section = commands_section_match.group(1)
-            # Process each line in the commands section
-            for line in commands_section.split("\n"):
-                # Skip separator lines and empty lines
-                if not line.strip() or re.match(
-                    r"^[\s\u2500\u256d\u256e\u2570\u256f\u2502]+$", line
-                ):
-                    continue
-
-                # Extract command name and description
-                # This works for "command    description" format
-                parts = re.split(r"\s{2,}", line.strip(), maxsplit=1)
-                if len(parts) >= 1:
-                    # Clean up command name (remove UI characters)
-                    cmd_name = parts[0].strip()
-                    cmd_name = re.sub(
-                        r"[\u2500\u256d\u256e\u2570\u256f\u2502]", "", cmd_name
-                    ).strip()
-
-                    # Clean up description
-                    cmd_desc = parts[1].strip() if len(parts) > 1 else None
-                    if cmd_desc:
-                        cmd_desc = re.sub(
-                            r"[\u2500\u256d\u256e\u2570\u256f\u2502]", "", cmd_desc
-                        ).strip()
-
-                    # Check for duplicates (case-insensitive)
-                    if cmd_name.lower() not in existing_cmd_names:
-                        commands.append({"name": cmd_name, "description": cmd_desc})
-                        existing_cmd_names.add(cmd_name.lower())
-
-        # If no commands were found with the above pattern, try simpler patterns
-        if not commands:
-            # Common patterns for commands in help text
-            command_patterns = [
-                # Pattern for "Commands:" section with indented commands
-                r"(?:Commands|Available commands):\s*\n((?:\s+\w+\s+.*\n)+)",
-                # Pattern for "Subcommands:" section
-                r"(?:Subcommands):\s*\n((?:\s+\w+.*\n)+)",
-                # Pattern for command lists with descriptions
-                r"^\s+(\w+)\s+(.*?)$",
-            ]
-
-            for pattern in command_patterns:
-                matches = re.findall(pattern, help_text, re.MULTILINE)
-                if matches:
-                    if isinstance(matches[0], tuple):
-                        # If matches are tuples, we have command and description
-                        for match in matches:
-                            cmd_name = match[0].strip()
-                            cmd_desc = match[1].strip() if len(match) > 1 else None
-
-                            # Check for duplicates (case-insensitive)
-                            if cmd_name.lower() not in existing_cmd_names:
-                                commands.append({"name": cmd_name, "description": cmd_desc})
-                                existing_cmd_names.add(cmd_name.lower())
-                    else:
-                        # Otherwise, we have a block of text with commands
-                        for block in matches:
-                            for line in block.split("\n"):
-                                if line.strip():
-                                    parts = line.strip().split(maxsplit=1)
-                                    cmd_name = parts[0].strip()
-                                    cmd_desc = parts[1].strip() if len(parts) > 1 else None
-
-                                    # Check for duplicates (case-insensitive)
-                                    if cmd_name.lower() not in existing_cmd_names:
-                                        commands.append({"name": cmd_name, "description": cmd_desc})
-                                        existing_cmd_names.add(cmd_name.lower())
-
-        logger.debug(f"Extracted {len(commands)} commands from help text")
-        return commands
-
-    def extract_options(self, help_text: str) -> List[Dict[str, Any]]:
-        """
-        Extract options from the help text.
-
-        Args:
-            help_text: The help text to parse.
-
-        Returns:
-            A list of dictionaries with option information.
-        """
-        logger.debug("Extracting options from help text")
-        options = []
-
-        # Common patterns for options in help text
-        option_patterns = [
-            # Pattern for "-o, --option DESCRIPTION" format
-            r"^\s+(-\w),?\s+(--[\w-]+)(?:\s+[<[][\w-]+[>\]])?\s+(.*?)$",
-            # Pattern for "--option DESCRIPTION" format
-            r"^\s+(--[\w-]+)(?:\s+[<[][\w-]+[>\]])?\s+(.*?)$",
-            # Pattern for "-o DESCRIPTION" format
-            r"^\s+(-\w)(?:\s+[<[][\w-]+[>\]])?\s+(.*?)$",
-        ]
-
-        for pattern in option_patterns:
-            matches = re.findall(pattern, help_text, re.MULTILINE)
-            for match in matches:
-                if len(match) == 3:  # short and long form
-                    options.append(
-                        {
-                            "short_form": match[0],
-                            "long_form": match[1],
-                            "description": match[2].strip(),
-                            "name": match[1].lstrip("-"),
-                        }
-                    )
-                elif len(match) == 2:  # only one form
-                    form = match[0]
-                    is_short = form.startswith("-") and not form.startswith("--")
-                    options.append(
-                        {
-                            "short_form": form if is_short else None,
-                            "long_form": None if is_short else form,
-                            "description": match[1].strip(),
-                            "name": form.lstrip("-"),
-                        }
-                    )
-
-        return options
-
-    def extract_arguments(self, help_text: str) -> List[Dict[str, Any]]:
-        """
-        Extract arguments from the help text.
-
-        Args:
-            help_text: The help text to parse.
-
-        Returns:
-            A list of dictionaries with argument information.
-        """
-        logger.debug("Extracting arguments from help text")
-        arguments = []
-
-        # Common patterns for arguments in help text
-        arg_patterns = [
-            # Pattern for "ARG Description" format
-            r"^\s+([A-Z_]+|\<[\w-]+\>|\[[\w-]+\])\s+(.*?)$",
-        ]
-
-        position = 0
-        for pattern in arg_patterns:
-            matches = re.findall(pattern, help_text, re.MULTILINE)
-            for match in matches:
-                # Skip if it looks like an option
-                if match[0].startswith("-"):
-                    continue
-
-                # Determine if required based on brackets
-                required = not (match[0].startswith("[") and match[0].endswith("]"))
-
-                # Clean up the name
-                name = match[0].strip("<>[]").lower()
-
-                arguments.append(
-                    {
-                        "name": name,
-                        "description": match[1].strip(),
-                        "required": required,
-                        "position": position,
-                    }
-                )
-                position += 1
-
-        return arguments
+    # --- Extraction methods delegate to HelpTextParser ---
 
     def extract_examples(self, command: Command) -> List[Dict[str, Any]]:
         """
-        Extract usage examples for a specific command.
+        Extract usage examples for a specific command by delegating to the parser.
 
         Args:
             command: The command to extract examples for.
 
         Returns:
             A list of dictionaries containing example information.
-
-        Raises:
-            CommandExecutionError: If the command help cannot be executed.
-            ValidationError: If the examples cannot be extracted.
         """
-        logger.debug(f"Extracting examples for command: {command.name}")
+        logger.debug(f"Extracting examples for command: {command.name} using parser")
+        # Requires help text to be populated first
+        if not command.help_text:
+             # Attempt to get help text if missing
+             try:
+                 # Build command path for subcommands by traversing the parent chain
+                 command_path_parts: List[str] = []
+                 current_cmd = command
+                 while hasattr(current_cmd, "parent_command_id") and current_cmd.parent_command_id:
+                     parent_cmd = next((cmd for cmd in command.cli_tool.commands if cmd.id == current_cmd.parent_command_id), None)
+                     if parent_cmd and hasattr(parent_cmd, "name"):
+                         command_path_parts.insert(0, parent_cmd.name)
+                         current_cmd = parent_cmd
+                     else:
+                         break
+                 command_path = " ".join(command_path_parts)
+                 command.help_text = self.get_command_help_text(
+                     command.cli_tool.name, command.name, command_path
+                 )
+             except CommandExecutionError:
+                 logger.warning(f"Could not get help text for {command.name} to extract examples.")
+                 return [] # Return empty if help text cannot be obtained
 
-        tool_name = command.cli_tool.name
-        command_name = command.name
-
-        # Build command path for subcommands by traversing the parent chain
-        command_path_parts: List[str] = []
-        current_command = command
-
-        # First, check if the command has a parent
-        while hasattr(current_command, "parent_command_id") and current_command.parent_command_id:
-            # Find the parent command by ID
-            parent_command = None
-            for cmd in command.cli_tool.commands:
-                if hasattr(cmd, "id") and cmd.id == current_command.parent_command_id:
-                    parent_command = cmd
-                    break
-
-            # If found, add to path and continue up the chain
-            if parent_command and hasattr(parent_command, "name"):
-                command_path_parts.insert(0, parent_command.name)
-                current_command = parent_command
-            else:
-                break
-
-        # Build the full command path
-        command_path = " ".join(command_path_parts)
-
-        # Build the full command string
-        if command_path:
-            full_cmd = f"{tool_name} {command_path} {command_name}"
+        if command.help_text:
+            return self.help_parser.extract_examples(command.cli_tool.name, command.help_text)
         else:
-            full_cmd = f"{tool_name} {command_name}"
-
-        try:
-            help_text = self.get_command_help_text(
-                tool_name, command_name, parent_path=command_path
-            )
-        except CommandExecutionError:
-            logger.warning(f"Could not get help text for {full_cmd}")
             return []
 
-        examples = []
-
-        # Common patterns for examples in help text
-        example_patterns = [
-            # Pattern for "Examples:" section
-            r"(?:Examples|EXAMPLES):\s*\n((?:\s+.*\n)+)",
-            # Pattern for individual example lines
-            r"^\s+(\$\s+.*|\w+\s+.*?:.*)",
-        ]
-
-        for pattern in example_patterns:
-            matches = re.findall(pattern, help_text, re.MULTILINE)
-
-            if matches:
-                if len(matches[0].split("\n")) > 1:  # Block of examples
-                    for block in matches:
-                        for line in block.split("\n"):
-                            line = line.strip()
-                            if line:
-                                # Remove prompts like "$" or ">"
-                                cmd_line = re.sub(r"^\s*[$>]\s*", "", line)
-                                if cmd_line.startswith(tool_name):
-                                    examples.append({"command_line": cmd_line, "description": None})
-                else:  # Individual examples
-                    for match in matches:
-                        # Remove prompts like "$" or ">"
-                        cmd_line = re.sub(r"^\s*[$>]\s*", "", match)
-                        if cmd_line.startswith(tool_name):
-                            examples.append({"command_line": cmd_line, "description": None})
-
-        return examples
 
     def update_command_info(
         self, command: Command, processed_commands: Optional[Set[str]] = None
@@ -526,8 +294,8 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             if desc_match:
                 command.description = desc_match.group(1).strip()
 
-            # Extract options
-            options_data = self.extract_options(help_text)
+            # Extract options using the parser
+            options_data = self.help_parser.extract_options(help_text)
             for option_data in options_data:
                 option = Option(
                     command_id=command.id,
@@ -535,23 +303,24 @@ class StandardCLIAnalyzer(CLIAnalyzer):
                     short_form=option_data.get("short_form"),
                     long_form=option_data.get("long_form"),
                     description=option_data.get("description"),
-                    required=False,  # Usually options are optional
+                    required=option_data.get("required", False), # Use parsed required status if available
                 )
                 command.options.append(option)
 
-            # Extract arguments
-            args_data = self.extract_arguments(help_text)
+            # Extract arguments using the parser
+            args_data = self.help_parser.extract_arguments(help_text)
             for arg_data in args_data:
                 argument = Argument(
                     command_id=command.id,
                     name=arg_data.get("name", ""),
                     description=arg_data.get("description"),
                     required=arg_data.get("required", False),
+                    position=arg_data.get("position", 0), # Use parsed position
                 )
                 command.arguments.append(argument)
 
-            # Extract examples
-            examples_data = self.extract_examples(command)
+            # Extract examples using the parser
+            examples_data = self.help_parser.extract_examples(command.cli_tool.name, help_text)
             for example_data in examples_data:
                 example = Example(
                     command_id=command.id,
@@ -560,14 +329,9 @@ class StandardCLIAnalyzer(CLIAnalyzer):
                 )
                 command.examples.append(example)
 
-            # Extract subcommands by analyzing help text for this command
-            # Build the command path for subcommand extraction
-            cmd_path = command.name
-            if command_path:
-                cmd_path = f"{command_path} {cmd_path}"
-
-            subcommands_data = self.extract_commands(
-                f"{command.cli_tool.name} {cmd_path}", help_text
+            # Extract subcommands using the parser
+            subcommands_data = self.help_parser.extract_commands(
+                f"{command.cli_tool.name} {command_path} {command.name}", help_text
             )
 
             # Process subcommands
@@ -676,8 +440,8 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         # Phase 1: Initial discovery of top-level commands
         logger.debug("Step 4/7: Discovering top-level commands...")
 
-        # Extract top-level commands
-        main_commands = self.extract_commands(tool_name, help_text)
+        # Extract top-level commands using the parser
+        main_commands = self.help_parser.extract_commands(tool_name, help_text)
         logger.info(f"Tool {tool_name} has {len(main_commands)} main commands identified")
 
         # Create top-level commands
@@ -777,8 +541,8 @@ class StandardCLIAnalyzer(CLIAnalyzer):
                     parent_path = " ".join(command_path_parts[:-1])
                     help_text = self.get_command_help_text(tool_name, current_cmd_name, parent_path)
 
-                # Extract subcommands
-                subcommands_data = self.extract_commands(f"{tool_name} {command_path}", help_text)
+                # Extract subcommands using the parser
+                subcommands_data = self.help_parser.extract_commands(f"{tool_name} {command_path}", help_text)
 
                 if subcommands_data:
                     logger.debug(
