@@ -521,11 +521,15 @@ The Testronaut architecture has evolved substantially through Phase 3 (Core Arch
    - Comprehensive logging
 
 2. **LLM Service**
-   - Provider-based architecture
-   - Support for OpenAI, Anthropic, and mock providers
-   - Task-specific model selection
-   - Structured JSON output generation
-   - Error handling and retries
+   - **Implemented `DefaultLLMManager`**: Handles provider loading and delegation.
+   - **Implemented `BaseLLMProvider` protocol**: Defines the interface for providers.
+   - **Implemented `LlamaCppProvider`**: Basic support for local GGUF models.
+   - **Implemented `MockProvider`**: For testing and default fallback.
+   - **Factory Registration**: Manager registered with the factory system (in factory init).
+   - **Configuration**: `LLMSettings` updated for local model registration (`RegisteredModel`) and selection.
+   - **CLI Management**: New `config llm` commands (`add`, `list`, `remove`, `set`, `test`, `chat`) for user-friendly local model handling, including Hub download/selection.
+   - *Note: Support for cloud providers (OpenAI, Anthropic) needs to be implemented as providers.*
+   - *Note: Advanced manager features (task routing, cost optimization) deferred.*
 
 3. **CLI Analyzer**
    - Standard analyzer implementation
@@ -537,12 +541,9 @@ The Testronaut architecture has evolved substantially through Phase 3 (Core Arch
 
 ### Current Development Focus:
 
-We are now implementing the Test Plan Generator in Phase 5, which builds on the CLI Analysis Engine to:
-- Generate test plans from CLI analysis results
-- Create diverse test cases using LLM capabilities
-- Predict expected outputs for commands
-- Support various test coverage levels
-- Provide user-friendly CLI access
+Primary focus is Phase 5 (Test Plan Generator). Foundational work for Phase 8 (Model Flexibility) was prioritized and completed to enable local LLM usage.
+- **Phase 5**: Implementing test plan models and the generator component.
+- **Phase 8 (Ongoing)**: Need to implement remaining LLM manager methods and provider capabilities (e.g., classification, extraction via prompting).
 
 ### Architectural Decisions:
 

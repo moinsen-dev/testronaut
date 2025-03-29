@@ -149,6 +149,16 @@ Testronaut requires an LLM for analysis and verification. You can configure clou
     testronaut config llm remove my-local-model --delete-file # Optionally delete the file
     ```
 
+6.  **Test the Configuration:**
+    ```bash
+    testronaut config llm test
+    ```
+
+7.  **Chat with the Model:**
+    ```bash
+    testronaut config llm chat
+    ```
+
 **Using Cloud Providers:**
 
 *   Configure API keys via environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) or directly in the configuration file (`~/.testronaut/config.yaml`).

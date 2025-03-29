@@ -116,9 +116,15 @@ We are now ready to move to Phase 005 - Test Plan Generator implementation.
 14. **Installed `llama-cpp-python` dependency.**
 15. **Added `llama-cpp` configuration structure (`RegisteredModel`, list) to `LLMSettings`.**
 16. **Implemented provider loading in `DefaultLLMManager`.**
-17. **Registered `DefaultLLMManager` with the factory.**
+17. **Registered `DefaultLLMManager` with the factory (moved to factory init).**
 18. **Implemented Hugging Face GGUF download utility.**
-19. **Refactored `config` CLI command:** Removed `test-llm`, added `llm` subcommand group with `add`, `list`, `remove`, `set` commands for local model management.
+19. **Refactored `config` CLI command:** Removed `test-llm`, added `llm` subcommand group (`add`, `list`, `remove`, `set`).
+20. **Enhanced `config llm add`:** Auto-detect Hub ID, prompt for multiple GGUFs with size info, auto-set default.
+21. **Added `config llm test` command.**
+22. **Added `config llm chat` command.**
+23. **Fixed `DefaultLLMManager` initialization logic.**
+24. **Fixed `LlamaCppProvider` duplicate `verbose` argument error.**
+25. **Fixed `LLMManager` protocol definition and related type errors.**
 
 ## Current Tasks
 
@@ -154,10 +160,10 @@ We are now ready to move to Phase 005 - Test Plan Generator implementation.
 3. Configuration
    - [ ] Ensure provider-specific config (e.g., `model_path`, `n_ctx`) is passed correctly during initialization.
 4. CLI (`config llm`)
-   - [ ] Refine error handling and user feedback.
-   - [ ] Add tests for the new CLI commands.
+   - [ ] Refine error handling and user feedback (e.g., in `llm test` when provider fails).
+   - [ ] Add tests for the new CLI commands (`add`, `list`, `remove`, `set`, `test`, `chat`).
 5. Testing (Core LLM)
-   - [ ] Add unit/integration tests for LLM Manager and LlamaCppProvider.
+   - [ ] Add unit/integration tests for LLM Manager, LlamaCppProvider, MockProvider.
 
 ## Decisions & Considerations
 

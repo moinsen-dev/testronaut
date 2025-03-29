@@ -72,9 +72,11 @@
 - ⬜ Test result storage and analysis
 
 ### Phase 8: Model Flexibility (Started - Foundational Work)
-- 🔄 Foundational LLM Manager implementation
-- 🔄 Basic `llama-cpp-python` provider structure
-- 🔄 Configuration for local LLM provider
+- ✅ Foundational LLM Manager implementation (`DefaultLLMManager`, registration fix)
+- ✅ Basic `llama-cpp-python` provider structure (`LlamaCppProvider`, `MockProvider`, `BaseLLMProvider`)
+- ✅ Configuration for local LLM provider (`LLMSettings`, `RegisteredModel`)
+- ✅ User-friendly CLI for local model management (`config llm add/list/remove/set/test/chat`)
+- ✅ Hugging Face GGUF download utility with model selection
 - ⬜ Support for multiple *other* LLM providers (OpenAI, Anthropic planned)
 - ⬜ Customizable LLM configuration (Advanced)
 - ⬜ Model fallback mechanisms
@@ -106,7 +108,7 @@ Testronaut is progressing well with Version 0.4.0 released. The project structur
 | Phase 005: Test Plan Generator | 🚧 In Progress | 10% |
 | Phase 006: Docker Test Execution | ❌ Not Started | 0% |
 | Phase 007: AI Result Verification | ❌ Not Started | 0% |
-| Phase 008: Model Flexibility | 🚧 In Progress | 20% | # Updated status and progress
+| Phase 008: Model Flexibility | 🚧 In Progress | 35% | # Updated status and progress
 | Phase 009: Reporting System | ❌ Not Started | 0% |
 | Phase 010: Integration & Release | ❌ Not Started | 0% |
 
@@ -241,7 +243,9 @@ The implementation plan follows a sequential approach with some parallel develop
 - [x] Configuration support for `llama-cpp` provider (`RegisteredModel`, list)
 - [x] `llama-cpp-python` moved to optional dependencies
 - [x] Hugging Face GGUF download utility (`llm.utils.download_gguf_model`)
-- [x] Refactored `config` CLI command: Added `llm` subcommand (`add`, `list`, `remove`, `set`)
+- [x] Refactored `config` CLI command: Added `llm` subcommand (`add`, `list`, `remove`, `set`, `test`, `chat`) with enhanced `add` functionality.
+- [x] Fixed LLM Manager initialization and registration bugs.
+- [x] Fixed `LlamaCppProvider` argument bug.
 
 ## Current Development Focus
 
