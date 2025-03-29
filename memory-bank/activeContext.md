@@ -128,6 +128,7 @@ We are now ready to move to Phase 005 - Test Plan Generator implementation.
 25. **Fixed `LLMManager` protocol definition and related type errors.**
 26. **Fixed `ImportError: cannot import name 'settings'` in `cli/commands/config.py` by removing unused import.**
 27. **Fixed `ImportError: cannot import name 'settings'` in `llm/utils.py` by using `get_settings()` function.**
+28. **Refactored large modules:** Extracted components from `cli/commands/config.py`, `analyzers/llm_enhanced_analyzer.py`, `analyzers/standard_analyzer.py`, `utils/docker.py`, and `ui/browser.py` into smaller, more focused modules/classes.
 
 ## Current Tasks
 
@@ -170,28 +171,28 @@ We are now ready to move to Phase 005 - Test Plan Generator implementation.
 
 ### Code Quality Refactoring Candidates (Ongoing)
 
-*   **High Priority:**
-    *   `src/testronaut/config/__init__.py` (Excessive logic in init)
-    *   `src/testronaut/utils/llm/__init__.py` (Excessive logic in init)
-    *   `src/testronaut/utils/logging/__init__.py` (Excessive logic in init)
-    *   `src/testronaut/analyzers/llm_enhanced_analyzer.py` (Very large module)
-    *   `src/testronaut/analyzers/standard_analyzer.py` (Very large module)
-    *   `src/testronaut/utils/docker.py` (Very large module)
-    *   `src/testronaut/ui/browser.py` (Large UI component)
-    *   `src/testronaut/cli/commands/config.py` (Large command module)
-*   **Medium Priority:**
-    *   `src/testronaut/utils/errors/__init__.py` (Potentially large init)
-    *   `src/testronaut/factory/__init__.py` (Potentially large init)
-    *   `src/testronaut/cli/commands/analyze_commands.py` (Large command module)
-    *   `src/testronaut/utils/llm/result_processor.py` (Large utility module)
-    *   `src/testronaut/utils/command.py` (Large utility module)
-    *   `src/testronaut/ui/repository.py` (Large UI component)
-    *   `src/testronaut/models/cli_tool.py` (Large model file)
+*   **High Priority (Completed/Reviewed):**
+    *   `src/testronaut/config/__init__.py` (Reviewed - OK)
+    *   `src/testronaut/utils/llm/__init__.py` (Reviewed - OK)
+    *   `src/testronaut/utils/logging/__init__.py` (Reviewed - OK)
+    *   `src/testronaut/analyzers/llm_enhanced_analyzer.py` (✅ Refactored)
+    *   `src/testronaut/analyzers/standard_analyzer.py` (✅ Refactored)
+    *   `src/testronaut/utils/docker.py` (✅ Refactored)
+    *   `src/testronaut/ui/browser.py` (✅ Refactored)
+    *   `src/testronaut/cli/commands/config.py` (✅ Refactored)
+*   **Medium Priority (Completed/Reviewed):**
+    *   `src/testronaut/utils/errors/__init__.py` (Reviewed - OK)
+    *   `src/testronaut/factory/__init__.py` (Reviewed - OK)
+    *   `src/testronaut/cli/commands/analyze_commands.py` (✅ Refactored)
+    *   `src/testronaut/utils/llm/result_processor.py` (Reviewed - OK)
+    *   `src/testronaut/utils/command.py` (Reviewed - OK)
+    *   `src/testronaut/ui/repository.py` (Reviewed - OK)
+    *   `src/testronaut/models/cli_tool.py` (Reviewed - OK)
 *   **Low Priority (Review/Organize):**
     *   `src/testronaut/migrations/__init__.py` (Review init)
-    *   `src/testronaut/utils/llm/providers/openai.py` (Large provider)
-    *   `src/testronaut/utils/llm/prompts.py` (Large prompts file)
-    *   `src/testronaut/utils/llm/llm_service.py` (Large service file)
+    *   `src/testronaut/utils/llm/providers/openai.py` (Large provider - Deferred)
+    *   `src/testronaut/utils/llm/prompts.py` (Large prompts file - Deferred)
+    *   `src/testronaut/utils/llm/llm_service.py` (Large service file - Deferred)
 
 ## Decisions & Considerations
 

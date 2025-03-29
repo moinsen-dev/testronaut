@@ -233,7 +233,119 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
             return command
         except Exception as e:
             logger.error(f"Failed during update_command_info for '{command.name}': {str(e)}", exc_info=True)
+            # Metadata is not tracked per command, so no need to check/add it here.
+            # Optionally, we could add an error flag or note to the command object itself if needed.
             return command # Return original command on error
+
+    # --- Refactored Analysis Orchestration ---
+
+    def _run_standard_analysis(
+        self, tool_name: str, version: Optional[str], max_commands: Optional[int]
+    ) -> CLITool:
+        """Runs the standard analysis phase."""
+        logger.info("Phase 1/4: Running standard analysis...")
+        start_time = time.time()
+        try:
+            cli_tool = self.standard_analyzer.analyze_cli_tool(
+                tool_name, version, max_commands=max_commands
+            )
+        except Exception as e:
+            logger.error(f"Standard analysis failed for tool '{tool_name}': {e}", exc_info=True)
+            cli_tool = CLITool(name=tool_name, version=version or "unknown")
+            try:
+                cli_tool.help_text = self.get_tool_help_text(tool_name)
+            except Exception:
+                logger.error(f"Could not retrieve basic help text for '{tool_name}'. Analysis severely limited.")
+                cli_tool.help_text = f"Error retrieving help for {tool_name}"
+        logger.info(f"Standard analysis phase completed in {time.time() - start_time:.2f} seconds")
+        return cli_tool
+
+    def _enhance_tool_with_llm(self, cli_tool: CLITool) -> None:
+        """Enhances the top-level tool information using LLM."""
+        logger.info("Phase 2/4: Enhancing tool analysis with LLM...")
+        start_enhance_time = time.time()
+
+        # Enhance tool description
+        if cli_tool.help_text and (not cli_tool.description or len(cli_tool.description) < 10):
+            logger.info("Enhancing tool description...")
+            try:
+                cli_tool.description = self.llm_helper.enhance_description_with_llm(
+                    cli_tool.description, cli_tool.help_text, cli_tool.name
+                )
+                self._track_llm_usage()
+            except Exception as e:
+                logger.warning(f"Failed to enhance tool description: {e}")
+
+        # Analyze tool purpose and background
+        if cli_tool.help_text:
+            logger.info("Analyzing tool purpose and background...")
+            try:
+                purpose_analysis = self.llm_helper.analyze_tool_purpose(cli_tool.name, cli_tool.help_text)
+                self._track_llm_usage()
+                cli_tool.purpose = purpose_analysis.get("purpose", cli_tool.purpose or "")
+                cli_tool.background = purpose_analysis.get("background", cli_tool.background or "")
+                cli_tool.use_cases = purpose_analysis.get("use_cases", cli_tool.use_cases or [])
+                cli_tool.testing_considerations = purpose_analysis.get("testing_considerations", cli_tool.testing_considerations or [])
+            except Exception as e:
+                logger.warning(f"Failed to analyze tool purpose: {e}")
+
+        # Extract commands if standard analysis failed to find any
+        if not cli_tool.commands and cli_tool.help_text:
+            logger.info("No commands found by standard analysis. Attempting LLM extraction...")
+            self._extract_commands_with_llm(cli_tool) # Calls helper internally
+
+        logger.info(f"Tool enhancement completed in {time.time() - start_enhance_time:.2f} seconds")
+
+    def _enhance_commands_with_llm(self, cli_tool: CLITool) -> None:
+        """Enhances individual commands using LLM."""
+        if not cli_tool.commands:
+            logger.info("Phase 3/4: No commands found to enhance.")
+            return
+
+        logger.info("Phase 3/4: Enhancing individual commands...")
+        start_cmd_enhance_time = time.time()
+        enhancement_errors = 0
+        num_commands_to_process = len(cli_tool.commands)
+        for i, command in enumerate(cli_tool.commands):
+            cmd_name = getattr(command, "name", f"command_{i+1}")
+            logger.info(f"Enhancing command {i+1}/{num_commands_to_process}: {cmd_name}")
+            try:
+                # update_command_info handles ensuring help text, enhancing description,
+                # extracting structure, and analyzing purpose.
+                self.update_command_info(command)
+            except Exception as e:
+                # Error is logged within update_command_info
+                enhancement_errors += 1
+
+        if enhancement_errors > 0:
+            logger.warning(f"Encountered {enhancement_errors} errors during command enhancement.")
+        logger.info(f"Command enhancement completed in {time.time() - start_cmd_enhance_time:.2f} seconds")
+
+    def _analyze_relationships_with_llm(self, cli_tool: CLITool) -> None:
+        """Analyzes command relationships using LLM."""
+        if not cli_tool.commands:
+            logger.info("Phase 4/4: No commands found to analyze relationships.")
+            return
+
+        logger.info("Phase 4/4: Analyzing command relationships...")
+        start_rel_time = time.time()
+        try:
+            command_data = [
+                {"name": cmd.name, "description": cmd.description or ""}
+                for cmd in cli_tool.commands if hasattr(cmd, 'name')
+            ]
+            if command_data:
+                relationships = self.llm_helper.analyze_command_relationships(cli_tool.name, command_data)
+                self._track_llm_usage()
+                if relationships:
+                    add_relationship_analysis(cli_tool, relationships)
+                    self._apply_relationship_insights(cli_tool, relationships)
+            else:
+                 logger.warning("No valid command data to analyze relationships.")
+        except Exception as e:
+            logger.error(f"Failed to analyze command relationships: {str(e)}", exc_info=True)
+        logger.info(f"Relationship analysis completed in {time.time() - start_rel_time:.2f} seconds")
+
 
     def analyze_cli_tool(
         self, tool_name: str, version: Optional[str] = None, max_commands: Optional[int] = None
@@ -379,28 +491,19 @@ class LLMEnhancedAnalyzer(CLIAnalyzer):
             # Determine parent path
             parent_path = ""
             if command.is_subcommand and command.parent_command_id:
-                 parent_cmd = next((cmd for cmd in command.cli_tool.commands if cmd.id == command.parent_command_id), None)
+                 # Find parent command within the tool's command list
+                 parent_cmd = next((cmd for cmd in getattr(command.cli_tool, 'commands', []) if cmd.id == command.parent_command_id), None)
                  if parent_cmd:
                      parent_path = parent_cmd.name # Assuming simple hierarchy for now
 
-            # Try standard method first
+            # Try standard method first (which itself has LLM fallback)
             command.help_text = self.get_command_help_text(tool_name, command.name, parent_path)
-            logger.info(f"Successfully retrieved help text for '{command.name}'.")
+            logger.info(f"Successfully retrieved/generated help text for '{command.name}'.")
 
         except CommandExecutionError as e:
-            logger.warning(f"Standard help text retrieval failed for '{command.name}': {e}. Attempting LLM generation.")
-            try:
-                # Fallback to LLM generation
-                command.help_text = self.llm_helper.generate_help_text_with_llm(
-                    tool_name,
-                    command.name,
-                    command.description,
-                    command.purpose
-                )
-                self._track_llm_usage()
-            except Exception as llm_e:
-                logger.error(f"LLM help text generation failed for '{command.name}': {llm_e}", exc_info=True)
-                command.help_text = f"Help text generation failed for {command.name}" # Placeholder
+            # This means both standard and its LLM fallback failed
+            logger.error(f"Failed to retrieve or generate help text for '{command.name}' even with fallback: {e}", exc_info=True)
+            command.help_text = f"Help text retrieval/generation failed for {command.name}" # Placeholder
         except Exception as e:
              logger.error(f"Unexpected error ensuring help text for '{command.name}': {e}", exc_info=True)
              command.help_text = f"Error retrieving help text for {command.name}" # Placeholder
