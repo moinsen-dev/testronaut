@@ -31,7 +31,7 @@
 - ✅ Logging and error handling
 - ✅ CLI framework implementation
 - ✅ Repository pattern foundation
-- ✅ LLM service integration
+- ✅ LLM service *interface* defined (Note: Concrete manager implementation was missing)
 
 ### Phase 4: CLI Analysis Engine
 - ✅ CLI tool analyzer implementation
@@ -71,9 +71,12 @@
 - ⬜ Verification reporting
 - ⬜ Test result storage and analysis
 
-### Phase 8: Model Flexibility
-- ⬜ Support for multiple LLM providers
-- ⬜ Customizable LLM configuration
+### Phase 8: Model Flexibility (Started - Foundational Work)
+- 🔄 Foundational LLM Manager implementation
+- 🔄 Basic `llama-cpp-python` provider structure
+- 🔄 Configuration for local LLM provider
+- ⬜ Support for multiple *other* LLM providers (OpenAI, Anthropic planned)
+- ⬜ Customizable LLM configuration (Advanced)
 - ⬜ Model fallback mechanisms
 - ⬜ Performance optimization
 
@@ -103,7 +106,7 @@ Testronaut is progressing well with Version 0.4.0 released. The project structur
 | Phase 005: Test Plan Generator | 🚧 In Progress | 10% |
 | Phase 006: Docker Test Execution | ❌ Not Started | 0% |
 | Phase 007: AI Result Verification | ❌ Not Started | 0% |
-| Phase 008: Model Flexibility | ❌ Not Started | 0% |
+| Phase 008: Model Flexibility | 🚧 In Progress | 20% | # Updated status and progress
 | Phase 009: Reporting System | ❌ Not Started | 0% |
 | Phase 010: Integration & Release | ❌ Not Started | 0% |
 
@@ -216,7 +219,7 @@ The implementation plan follows a sequential approach with some parallel develop
 | 5 | Test Plan Generator | 🔄 |
 | 6 | Docker Test Execution | 📝 |
 | 7 | AI Result Verification | 📝 |
-| 8 | Model Flexibility | 📝 |
+| 8 | Model Flexibility | 🔄 | # Updated status
 | 9 | Reporting System | 📝 |
 | 10 | Integration & Release | 📝 |
 
@@ -233,6 +236,10 @@ The implementation plan follows a sequential approach with some parallel develop
 - [x] LLM-enhanced CLI analysis for better understanding of commands
 - [x] Database storage for CLI analysis results
 - [x] Interactive database browser with Textual UI
+- [x] Foundational LLM Manager implementation (`DefaultLLMManager`)
+- [x] Basic `LlamaCppProvider` structure for local models
+- [x] Configuration support for `llama-cpp` provider
+- [x] `llama-cpp-python` moved to optional dependencies
 
 ## Current Development Focus
 

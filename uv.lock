@@ -1397,7 +1397,6 @@ dependencies = [
     { name = "alembic" },
     { name = "anthropic" },
     { name = "huggingface-hub" },
-    { name = "llama-cpp-python" },
     { name = "openai" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -1439,6 +1438,9 @@ docs = [
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
 ]
+local-llm = [
+    { name = "llama-cpp-python" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1448,7 +1450,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'all'", specifier = ">=25.1.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=25.1.0" },
     { name = "huggingface-hub", specifier = ">=0.29.3" },
-    { name = "llama-cpp-python", specifier = ">=0.3.8" },
+    { name = "llama-cpp-python", marker = "extra == 'local-llm'", specifier = ">=0.3.8" },
     { name = "mkdocs", marker = "extra == 'all'", specifier = ">=1.6.1" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.1" },
     { name = "mkdocs-autorefs", marker = "extra == 'all'", specifier = ">=1.4.1" },

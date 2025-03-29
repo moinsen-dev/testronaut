@@ -123,9 +123,16 @@ class LLMSettings(BaseSettings):
                     "json": "claude-3-opus-20240229",
                 },
             },
+            "llama-cpp": {
+                "model_path": None, # Required: Path to the GGUF model file
+                "n_ctx": 4096,      # Optional: Context size
+                "n_gpu_layers": 0,  # Optional: Number of layers to offload to GPU (0 = CPU only)
+                "verbose": False,   # Optional: llama-cpp verbosity
+                # Add other relevant llama-cpp parameters as needed
+            },
             "mock": {},
         },
-        description="Provider-specific settings",
+        description="Provider-specific settings (e.g., API keys, model paths)",
     )
 
     @model_validator(mode="after")

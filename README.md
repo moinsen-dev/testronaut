@@ -56,7 +56,7 @@ This approach dramatically reduces the effort required to create and maintain CL
 - **Intelligent Test Generation**: Create comprehensive test plans with minimal input
 - **Containerized Execution**: Run tests in isolated Docker environments
 - **Semantic Result Verification**: Compare outputs based on meaning, not exact matches
-- **Model Flexibility**: Support for both cloud and local LLMs for cost efficiency
+- **Model Flexibility**: Support for cloud LLMs (OpenAI, Anthropic) and local LLMs via `llama-cpp-python` (GGUF models).
 - **Comprehensive CI/CD**: Automated testing, documentation, and security scanning
 
 ## Getting Started
@@ -104,10 +104,13 @@ uv pip install pytest pytest-cov mypy ruff pre-commit
 uv pip install testronauting
 
 # Or install with pip
-pip install testronauting
+pip install testronaut
 
-# For local model support
-uv pip install "testronauting[local]"
+# For local model support (using llama-cpp-python)
+uv pip install "testronaut[local-llm]"
+
+# Or with pip:
+pip install "testronaut[local-llm]"
 ```
 
 ### Running Tests
