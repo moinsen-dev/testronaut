@@ -1,13 +1,11 @@
 # Active Context
 
 ## Current Focus
-We are currently focused on Phase 5: Test Plan Generator. Having completed the core architecture (Phase 3) and CLI analysis engine (Phase 4), we're now working on:
+We are primarily focused on Phase 5: Test Plan Generator. However, due to the need to manage LLM costs, we have also prioritized and started implementing foundational support for local LLMs (originally planned for Phase 8).
 
-1. **Test Plan Generation**: Building the component that creates test plans from CLI analysis results
-2. **LLM Integration for Test Cases**: Using LLM services to generate comprehensive test cases
-3. **Expected Output Prediction**: Implementing functionality to predict expected outputs for commands
-
-This phase leverages our completed CLI analyzer and LLM integration to automatically generate test cases based on the structure of CLI tools.
+Current work streams:
+1.  **Phase 5: Test Plan Generator**: Building the component that creates test plans from CLI analysis results.
+2.  **LLM Management & Local Provider**: Implementing the core `LLMManager` and adding support for `llama-cpp-python` to enable local model usage.
 
 ## Most Recent Phase Completion
 
@@ -42,19 +40,23 @@ We are developing the following components:
 
 ## Implementation Progress
 
-- Core architecture is fully implemented
-- CLI analyzer is complete and working well with robust handling of complex command structures
-- LLM service integration is in place with multiple provider support
-- Beginning work on test plan generation models and interfaces
-- Starting implementation of LLM-based test case generation
+- Core architecture is implemented.
+- CLI analyzer is complete.
+- **Discovered LLM Manager implementation was missing.**
+- **Implemented foundational LLM Manager (`DefaultLLMManager`).**
+- **Implemented basic `LlamaCppProvider` for local models.**
+- **Configured `llama-cpp-python` as an optional dependency.**
+- Beginning work on Phase 5 (Test Plan Generator) models and interfaces.
 
 ## Next Immediate Steps
 
-1. Define the TestPlan and TestCase data models
-2. Implement the TestGenerator interface
-3. Create the StandardTestGenerator class
-4. Design effective LLM prompts for test generation
-5. Integrate with the CLI framework for end-user access
+1.  **Phase 5:** Define `TestPlan`/`TestCase` models, `TestGenerator` interface.
+2.  **LLM:** Complete implementation of `DefaultLLMManager` methods (delegation, prompting).
+3.  **LLM:** Complete implementation of `LlamaCppProvider` methods.
+4.  **LLM:** Add configuration handling for passing settings to the provider.
+5.  **Phase 5:** Implement `StandardTestGenerator` (depends on LLM Manager).
+6.  **Phase 5:** Design LLM prompts for test generation.
+7.  **Phase 5:** Integrate test generation with the CLI.
 
 ## Development Context
 
@@ -106,27 +108,62 @@ We are now ready to move to Phase 005 - Test Plan Generator implementation.
 6. Fixed docs workflow to include all required MkDocs plugins (autorefs, mkdocstrings)
 7. Optimized CI/CD workflow to run tests only on Python 3.13 for faster execution
 8. Prepared for test plan generation implementation
+9. **Identified missing LLM Manager implementation.**
+10. **Created foundational LLM Manager (`DefaultLLMManager`).**
+11. **Created `LlamaCppProvider` structure.**
+12. **Created `BaseLLMProvider` protocol.**
+13. **Moved `llama-cpp-python` to optional dependencies.**
+14. **Installed `llama-cpp-python` dependency.**
+15. **Added `llama-cpp` configuration structure (`RegisteredModel`, list) to `LLMSettings`.**
+16. **Implemented provider loading in `DefaultLLMManager`.**
+17. **Registered `DefaultLLMManager` with the factory (moved to factory init).**
+18. **Implemented Hugging Face GGUF download utility.**
+19. **Refactored `config` CLI command:** Removed `test-llm`, added `llm` subcommand group (`add`, `list`, `remove`, `set`).
+20. **Enhanced `config llm add`:** Auto-detect Hub ID, prompt for multiple GGUFs with size info, auto-set default.
+21. **Added `config llm test` command.**
+22. **Added `config llm chat` command.**
+23. **Fixed `DefaultLLMManager` initialization logic.**
+24. **Fixed `LlamaCppProvider` duplicate `verbose` argument error.**
+25. **Fixed `LLMManager` protocol definition and related type errors.**
 
 ## Current Tasks
+
+### Phase 5: Test Plan Generator
 1. TestPlan Model
    - [ ] Define the data structure for comprehensive test plans
    - [ ] Implement the TestPlan model
-
 2. TestCase Model
    - [ ] Define the data structure for individual test cases
    - [ ] Implement the TestCase model
-
 3. TestGenerator Interface
    - [ ] Define the abstract interface for test generation capabilities
    - [ ] Implement the TestGenerator interface
-
 4. StandardTestGenerator
-   - [ ] Create the concrete implementation for test generation
+   - [ ] Create the concrete implementation (depends on LLM Manager)
    - [ ] Implement the StandardTestGenerator class
-
 5. CLI Integration
    - [ ] Design the command-line interface for test plan generation
    - [ ] Implement the CLI integration
+
+### LLM Management & Local Provider (Prioritized from Phase 8)
+1. DefaultLLMManager Implementation
+   - [ ] Implement delegation/prompting for `classify`
+   - [ ] Implement delegation/prompting for `extract_structured_data`
+   - [ ] Implement delegation/prompting for `analyze_help_text`
+   - [ ] Implement delegation/prompting for `compare_outputs`
+   - [ ] Implement fallback for `get_embedding` if provider lacks direct support
+2. LlamaCppProvider Implementation
+   - [ ] Implement `classify` using `generate_text`
+   - [ ] Implement `extract_structured_data` using `generate_text`
+   - [ ] Implement `analyze_help_text` using `generate_text`
+   - [ ] Implement `compare_outputs` using `generate_text`
+3. Configuration
+   - [ ] Ensure provider-specific config (e.g., `model_path`, `n_ctx`) is passed correctly during initialization.
+4. CLI (`config llm`)
+   - [ ] Refine error handling and user feedback (e.g., in `llm test` when provider fails).
+   - [ ] Add tests for the new CLI commands (`add`, `list`, `remove`, `set`, `test`, `chat`).
+5. Testing (Core LLM)
+   - [ ] Add unit/integration tests for LLM Manager, LlamaCppProvider, MockProvider.
 
 ## Decisions & Considerations
 

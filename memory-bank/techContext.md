@@ -18,6 +18,9 @@ Testronaut relies on the following key technologies:
 - **Docker SDK for Python**: Python library for Docker integration
 - **Pydantic**: Data validation and settings management
 - **Rich**: Terminal formatting and visualization
+- **llama-cpp-python**: Python bindings for llama.cpp (for local GGUF models) [Optional Dependency]
+- **questionary**: Interactive prompts for CLI
+- **huggingface-hub**: Utilities for interacting with Hugging Face Hub (model downloads)
 
 ### Development Tools
 - **uv**: Primary Python package manager for the project - chosen for its speed and reliability
@@ -148,9 +151,12 @@ Represents the result of executing a test case:
 ## Integration Points
 
 ### LLM Integration
-- **OpenAI API**: Default cloud LLM provider
-- **Anthropic API**: Alternative cloud provider
-- **Local Models**: Support for local models like Llama and Mistral
+- **LLM Manager**: Central component (`DefaultLLMManager`) coordinating providers.
+- **Cloud Providers**: OpenAI API, Anthropic API (planned).
+- **Local Provider**: `llama-cpp-python` for GGUF models (`LlamaCppProvider`).
+- **Mock Provider**: For testing and default initialization (`MockProvider`).
+- **Configuration**: Managed via `LLMSettings` in `config.yaml`, including provider selection and specific settings (API keys, model paths).
+- **CLI Management**: `testronaut config llm` commands for managing local models.
 
 ### Docker Integration
 - **Docker SDK**: For container management

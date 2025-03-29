@@ -56,7 +56,7 @@ This approach dramatically reduces the effort required to create and maintain CL
 - **Intelligent Test Generation**: Create comprehensive test plans with minimal input
 - **Containerized Execution**: Run tests in isolated Docker environments
 - **Semantic Result Verification**: Compare outputs based on meaning, not exact matches
-- **Model Flexibility**: Support for both cloud and local LLMs for cost efficiency
+- **Model Flexibility**: Support for cloud LLMs (OpenAI, Anthropic) and local LLMs via `llama-cpp-python` (GGUF models).
 - **Comprehensive CI/CD**: Automated testing, documentation, and security scanning
 
 ## Getting Started
@@ -104,11 +104,73 @@ uv pip install pytest pytest-cov mypy ruff pre-commit
 uv pip install testronauting
 
 # Or install with pip
-pip install testronauting
+pip install testronaut
 
-# For local model support
-uv pip install "testronauting[local]"
+# For local model support (using llama-cpp-python)
+uv pip install "testronaut[local-llm]"
+
+# Or with pip:
+pip install "testronaut[local-llm]"
 ```
+
+### Configuring LLMs
+
+Testronaut requires an LLM for analysis and verification. You can configure cloud providers (OpenAI, Anthropic) or use local models via `llama-cpp-python`.
+
+**Using Local Models (llama-cpp):**
+
+1.  **Install Local Support:**
+    ```bash
+    uv pip install "testronaut[local-llm]"
+    # or: pip install "testronaut[local-llm]"
+    ```
+
+2.  **Add a Model:** Download a GGUF model (e.g., from Hugging Face Hub) and register it:
+    ```bash
+    # Add by downloading from Hub (repo_id/filename.gguf)
+    testronaut config llm add TheBloke/Mistral-7B-Instruct-v0.2-GGUF/mistral-7b-instruct-v0.2.Q4_K_M.gguf --name mistral-7b
+
+    # Add using a local path
+    testronaut config llm add /path/to/your/local/model.gguf --name my-local-model
+    ```
+
+3.  **List Registered Models:**
+    ```bash
+    testronaut config llm list
+    ```
+
+4.  **Set Default Local Model:** This command also sets the active provider to `llama-cpp`.
+    ```bash
+    testronaut config llm set mistral-7b
+    ```
+
+5.  **Remove a Registered Model:**
+    ```bash
+    testronaut config llm remove my-local-model --delete-file # Optionally delete the file
+    ```
+
+6.  **Test the Configuration:**
+    ```bash
+    testronaut config llm test
+    ```
+
+7.  **Chat with the Model:**
+    ```bash
+    testronaut config llm chat
+    ```
+
+**Using Cloud Providers:**
+
+*   Configure API keys via environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) or directly in the configuration file (`~/.testronaut/config.yaml`).
+*   Set the active provider in the configuration file:
+    ```yaml
+    # ~/.testronaut/config.yaml
+    llm:
+      provider: openai # or anthropic
+      # ... other settings ...
+    ```
+
+*   Use `testronaut config show` to view the current configuration.
 
 ### Running Tests
 

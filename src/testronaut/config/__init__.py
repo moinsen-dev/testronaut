@@ -94,10 +94,18 @@ class DatabaseSettings(BaseSettings):
         return self.url
 
 
+# Model for storing registered local model information
+class RegisteredModel(BaseModel):
+    """Represents a registered local LLM model."""
+    name: str = Field(description="User-defined name for the model")
+    path: str = Field(description="Absolute path to the GGUF model file")
+    source: Optional[str] = Field(default=None, description="Source identifier (e.g., Hugging Face repo ID/filename)")
+
+
 class LLMSettings(BaseSettings):
     """LLM provider configuration settings."""
 
-    provider: str = Field(default="openai", description="The LLM provider to use")
+    provider: str = Field(default="openai", description="The LLM provider to use (e.g., openai, anthropic, llama-cpp)")
     model: str = Field(default="gpt-4", description="The model to use for the LLM provider")
     temperature: float = Field(default=0.7, description="The sampling temperature for the LLM")
     max_tokens: int = Field(default=1000, description="The maximum number of tokens to generate")
@@ -123,9 +131,17 @@ class LLMSettings(BaseSettings):
                     "json": "claude-3-opus-20240229",
                 },
             },
+            "llama-cpp": {
+                "model_path": None, # Path to the *currently active* GGUF model file (set by 'config llm set')
+                "n_ctx": 4096,
+                "n_gpu_layers": 0,
+                "verbose": False,
+                # Add other relevant llama-cpp parameters here if needed
+                "registered_models": [], # List[RegisteredModel] - managed by 'config llm' commands
+            },
             "mock": {},
         },
-        description="Provider-specific settings",
+        description="Provider-specific settings (e.g., API keys, model paths)",
     )
 
     @model_validator(mode="after")

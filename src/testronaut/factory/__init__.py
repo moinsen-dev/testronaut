@@ -101,8 +101,25 @@ registry = FactoryRegistry()
 from testronaut.factory.analyzer import analyzer_factory
 from testronaut.factory.executor import executor_factory
 from testronaut.factory.generator import generator_factory
-from testronaut.factory.llm import llm_factory
+from testronaut.factory.llm import llm_factory, LLMManagerFactory # Import specific factory type
 from testronaut.factory.verifier import verifier_factory
+
+# --- Register Default Implementations ---
+# Register the DefaultLLMManager with the llm_factory instance
+try:
+    from testronaut.llm.manager import DefaultLLMManager
+    if isinstance(llm_factory, LLMManagerFactory):
+        llm_factory.register_manager_class("default", DefaultLLMManager)
+    else:
+        # This case should ideally not happen if imports are correct
+        print(f"Warning: llm_factory is not an instance of LLMManagerFactory ({type(llm_factory)}). Cannot register DefaultLLMManager.")
+except ImportError:
+    # This might happen during initial setup or if structure changes
+    print("Warning: Could not import DefaultLLMManager for factory registration.")
+except Exception as e:
+    print(f"Warning: Error during DefaultLLMManager registration: {e}")
+# --- End Registration ---
+
 
 __all__ = [
     'Factory',
