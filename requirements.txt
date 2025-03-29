@@ -4,32 +4,91 @@ alembic==1.15.1
     # via testronaut (pyproject.toml)
 annotated-types==0.7.0
     # via pydantic
+anthropic==0.49.0
+    # via testronaut (pyproject.toml)
+anyio==4.9.0
+    # via
+    #   anthropic
+    #   httpx
+    #   openai
+certifi==2025.1.31
+    # via
+    #   httpcore
+    #   httpx
 click==8.1.8
     # via typer
+distro==1.9.0
+    # via
+    #   anthropic
+    #   openai
+h11==0.14.0
+    # via httpcore
+httpcore==1.0.7
+    # via httpx
+httpx==0.28.1
+    # via
+    #   anthropic
+    #   openai
+idna==3.10
+    # via
+    #   anyio
+    #   httpx
+jiter==0.9.0
+    # via
+    #   anthropic
+    #   openai
+linkify-it-py==2.0.3
+    # via markdown-it-py
 mako==1.3.9
     # via alembic
 markdown-it-py==3.0.0
-    # via rich
+    # via
+    #   mdit-py-plugins
+    #   rich
+    #   textual
 markupsafe==3.0.2
     # via mako
+mdit-py-plugins==0.4.2
+    # via markdown-it-py
 mdurl==0.1.2
     # via markdown-it-py
+openai==1.68.2
+    # via testronaut (pyproject.toml)
+platformdirs==4.3.7
+    # via textual
+prompt-toolkit==3.0.50
+    # via questionary
 pydantic==2.10.6
     # via
     #   testronaut (pyproject.toml)
+    #   anthropic
+    #   openai
+    #   pydantic-settings
     #   sqlmodel
 pydantic-core==2.27.2
     # via pydantic
+pydantic-settings==2.8.1
+    # via testronaut (pyproject.toml)
 pygments==2.19.1
     # via rich
+python-dotenv==1.1.0
+    # via pydantic-settings
 pyyaml==6.0.2
+    # via testronaut (pyproject.toml)
+questionary==2.1.0
     # via testronaut (pyproject.toml)
 rich==13.9.4
     # via
     #   testronaut (pyproject.toml)
+    #   textual
     #   typer
 shellingham==1.5.4
     # via typer
+sniffio==1.3.1
+    # via
+    #   anthropic
+    #   anyio
+    #   openai
 sqlalchemy==2.0.39
     # via
     #   alembic
@@ -38,12 +97,25 @@ sqlmodel==0.0.24
     # via testronaut (pyproject.toml)
 structlog==25.2.0
     # via testronaut (pyproject.toml)
+textual==2.1.2
+    # via testronaut (pyproject.toml)
+tqdm==4.67.1
+    # via openai
 typer==0.15.2
+    # via testronaut (pyproject.toml)
+types-pyyaml==6.0.12.20241230
     # via testronaut (pyproject.toml)
 typing-extensions==4.12.2
     # via
     #   alembic
+    #   anthropic
+    #   openai
     #   pydantic
     #   pydantic-core
     #   sqlalchemy
+    #   textual
     #   typer
+uc-micro-py==1.0.3
+    # via linkify-it-py
+wcwidth==0.2.13
+    # via prompt-toolkit

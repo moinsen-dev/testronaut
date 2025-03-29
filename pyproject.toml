@@ -25,6 +25,15 @@ dependencies = [
     "alembic>=1.15.1",
     "structlog>=25.2.0",
     "pyyaml>=6.0.2",
+    "textual>=2.1.2",
+    "openai>=1.12.0",
+    "anthropic>=0.8.0",
+    "questionary>=2.1.0",
+    "requests>=2.32.3",
+    "types-requests>=2.32.0.20250306",
+    "huggingface-hub>=0.29.3",
+    "llama-cpp-python>=0.3.8",
+    "pydantic-settings>=2.8.1",
 ]
 
 [project.optional-dependencies]
@@ -41,7 +50,6 @@ docs = [
     "mkdocstrings[python]>=0.29.0",
     "mkdocs-autorefs>=1.4.1",
 ]
-llm = ["openai>=1.12.0", "anthropic>=0.8.0"]
 
 all = [
     "openai>=1.68.2",

@@ -1,0 +1,28 @@
+{
+  "name": "ls",
+  "version": "CHANGELOG.md\nCONTRIBUTING.md\nLICENSE\nNEXT_STEPS.md\nPRD-AI-CLI-Testing-2025-03-24.md\nREADME.md\nUSER-IDEA.md\nbrowser_debug.log\nci\ndiagrams\ndocs\nexamples\nfeatures\nhtmlcov\nimages\nmemory-bank\nmkdocs.yml\npyproject.toml\npytest.ini\nrequirements.txt\nsetup.sh\nsrc\ntest_components.py\ntestronaut_analysis\ntests\nuv.lock",
+  "help_text": "CHANGELOG.md\nCONTRIBUTING.md\nLICENSE\nNEXT_STEPS.md\nPRD-AI-CLI-Testing-2025-03-24.md\nREADME.md\nUSER-IDEA.md\nbrowser_debug.log\nci\ndiagrams\ndocs\nexamples\nfeatures\nhtmlcov\nimages\nmemory-bank\nmkdocs.yml\npyproject.toml\npytest.ini\nrequirements.txt\nsetup.sh\nsrc\ntest_components.py\ntestronaut_analysis\ntests\nuv.lock\n",
+  "id": "1339d443-90f3-4347-b2e8-d3ed38622a44",
+  "created_at": "2025-03-25T10:11:21.074106",
+  "updated_at": null,
+  "install_command": null,
+  "description": "",
+  "purpose": "",
+  "background": "",
+  "use_cases": null,
+  "testing_considerations": null,
+  "meta_data": {
+    "llm_usage": {
+      "total_tokens": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "api_calls": 0,
+      "estimated_cost": 0.0,
+      "models_used": {}
+    },
+    "semantic_analysis": null,
+    "relationship_analysis": null,
+    "user_preferences": null,
+    "analysis_timestamp": null
+  }
+}

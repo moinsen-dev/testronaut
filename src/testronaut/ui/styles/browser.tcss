@@ -1,0 +1,80 @@
+/*
+Testronaut Database Browser Styles
+*/
+
+/* Main layout */
+#app-grid {
+    layout: grid;
+    grid-size: 3;
+    grid-columns: 1fr 1fr 2fr;
+    height: 100%;
+    background: $surface;
+}
+
+/* Left panel styling */
+#left-panel {
+    height: 100%;
+    border-right: solid $primary;
+}
+
+#tools-header {
+    padding: 1 2;
+    background: $primary;
+    color: $text;
+    text-style: bold;
+    width: 100%;
+}
+
+#search-container {
+    width: 100%;
+    height: auto;
+    padding: 1 2;
+}
+
+SearchInput {
+    width: 100%;
+    background: $surface-lighten-1;
+    border: tall $primary;
+}
+
+ToolsTable {
+    height: 1fr;
+    width: 100%;
+}
+
+SQLDebugButton {
+    margin: 1 2;
+    width: auto;
+}
+
+/* Middle panel styling */
+#middle-panel {
+    height: 100%;
+    border-right: solid $primary;
+}
+
+CommandTree {
+    padding: 1;
+    height: 1fr;
+    overflow: auto;
+    scrollbar-color: $primary;
+    border: none;
+}
+
+/* Right panel styling */
+#right-panel {
+    height: 100%;
+}
+
+DetailPanel {
+    height: 1fr;
+    overflow: auto;
+    padding: 1 2;
+    border: none;
+    scrollbar-color: $primary;
+}
+
+/* Make sure all panels take full height */
+Vertical {
+    height: 100%;
+}

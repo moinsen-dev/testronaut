@@ -1,8 +1,8 @@
 site_name: Testronaut
 site_description: AI-assisted testing tool for command-line applications
-site_url: https://yourusername.github.io/testronaut/
-repo_url: https://github.com/yourusername/testronaut
-repo_name: yourusername/testronaut
+site_url: https://moinsen-dev.github.io/testronaut/
+repo_url: https://github.com/moinsen-dev/testronaut
+repo_name: moinsen-dev/testronaut
 
 theme:
   name: material

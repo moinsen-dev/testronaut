@@ -1,46 +1,22 @@
 """
-Command module for analyzing CLI tools.
+Deprecated Command module for analyzing CLI tools.
+
+This module is being maintained for backward compatibility but will be removed in a future version.
+Please import from testronaut.cli.commands.analyze_commands instead.
 """
 
-from pathlib import Path
-from typing import Optional
+import warnings
 
-import typer
-from rich.console import Console
+# Issue deprecation warning
+warnings.warn(
+    "The testronaut.cli.commands.analyze module is deprecated. "
+    "Please use testronaut.cli.commands.analyze_commands instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-console = Console()
-app = typer.Typer(name="analyze")
+# Import from the new module for backward compatibility
+from testronaut.cli.commands.analyze_commands import app, tool
 
-@app.callback(invoke_without_command=True)
-def analyze(
-    ctx: typer.Context,
-    tool: Optional[str] = None,
-    output_file: Optional[Path] = None,
-):
-    """
-    Analyze CLI tool and generate a test plan.
-
-    This command analyzes the structure and behavior of a CLI tool
-    using the specified model and generates a comprehensive test plan.
-    """
-    # Get global options
-    tool = tool or ctx.parent.params.get("tool")
-
-    if not tool:
-        console.print("[bold red]Error:[/bold red] No CLI tool specified.")
-        console.print("Use --tool option to specify a CLI tool to analyze.")
-        raise typer.Exit(code=1)
-
-    # If no output file is specified, use the default location
-    if not output_file:
-        output_dir = ctx.parent.params.get("output_dir")
-        output_file = Path(output_dir) / f"{tool}_analysis.json"
-
-    console.print(f"[bold green]Analyzing[/bold green] CLI tool: {tool}")
-    console.print(f"Output will be saved to: {output_file}")
-
-    # This would call the actual analyzer in a real implementation
-    # from testronaut.core.analyzer import analyze_cli_tool
-    # analyze_cli_tool(tool, output_file, model=ctx.parent.params.get("model"))
-
-    console.print("[bold green]Analysis complete![/bold green]")
+# These symbols are imported here for backward compatibility
+__all__ = ["app", "tool"]

@@ -612,7 +612,14 @@ class StandardCLIAnalyzer(CLIAnalyzer):
                 f"Failed to update command {command.name}", details={"error": str(e)}
             )
 
-    def analyze_cli_tool(self, tool_name: str, version: Optional[str] = None) -> CLITool:
+    def analyze_cli_tool(
+        self,
+        tool_name: str,
+        version: Optional[str] = None,
+        max_depth: int = 5,
+        discovery_timeout: int = 300,
+        max_commands: Optional[int] = None,
+    ) -> CLITool:
         """
         Analyze a CLI tool and extract its commands, options, and arguments.
         Uses a two-phase approach to prevent cycles and provide accurate progress reporting.
@@ -620,6 +627,9 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         Args:
             tool_name: The name of the CLI tool to analyze.
             version: Optional specific version of the tool to analyze.
+            max_depth: Maximum depth for subcommand discovery to prevent infinite loops.
+            discovery_timeout: Timeout in seconds for the discovery phase.
+            max_commands: Maximum number of commands to analyze (including subcommands).
 
         Returns:
             A CLITool object with all extracted information.
@@ -627,11 +637,16 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         Raises:
             CommandExecutionError: If the tool cannot be executed.
             ValidationError: If the tool information cannot be validated.
+            TimeoutError: If the discovery process times out.
         """
-        logger.info(f"Analyzing CLI tool: {tool_name}")
+        logger.debug(f"Analyzing CLI tool: {tool_name}")
+
+        import time
+
+        start_time = time.time()
 
         # Check if tool is installed
-        logger.info(f"Step 1/7: Verifying installation of {tool_name}...")
+        logger.debug(f"Step 1/7: Verifying installation of {tool_name}...")
         if not self.verify_tool_installation(tool_name):
             raise CommandExecutionError(
                 f"CLI tool {tool_name} is not installed or not found in PATH",
@@ -639,14 +654,14 @@ class StandardCLIAnalyzer(CLIAnalyzer):
             )
 
         # Get tool help text
-        logger.info(f"Step 2/7: Retrieving main help text for {tool_name}...")
+        logger.debug(f"Step 2/7: Retrieving main help text for {tool_name}...")
         help_text = self.get_tool_help_text(tool_name)
 
         # Get tool version if not provided
         if not version:
-            logger.info(f"Step 3/7: Detecting version of {tool_name}...")
+            logger.debug(f"Step 3/7: Detecting version of {tool_name}...")
             version = self.get_tool_version(tool_name)
-            logger.info(f"Detected version: {version or 'unknown'}")
+            logger.debug(f"Detected version: {version or 'unknown'}")
 
         # Create CLI tool model
         cli_tool = CLITool(name=tool_name, version=version, help_text=help_text)
@@ -658,144 +673,267 @@ class StandardCLIAnalyzer(CLIAnalyzer):
         if desc_match:
             cli_tool.description = desc_match.group(1).strip()
 
-        # Phase 1: Extract and discover all commands (discovery phase)
-        logger.info(f"Step 4/7: Extracting top-level commands for {tool_name}...")
-        commands_data = self.extract_commands(tool_name, help_text)
-        logger.info(f"Found {len(commands_data)} top-level commands")
+        # Phase 1: Initial discovery of top-level commands
+        logger.debug("Step 4/7: Discovering top-level commands...")
 
-        # Create command models for top-level commands
-        for cmd_data in commands_data:
+        # Extract top-level commands
+        main_commands = self.extract_commands(tool_name, help_text)
+        logger.info(f"Tool {tool_name} has {len(main_commands)} main commands identified")
+
+        # Create top-level commands
+        for cmd_data in main_commands:
+            cmd_name = cmd_data.get("name", "")
+            if not cmd_name:  # Skip empty command names
+                continue
+
+            cmd_desc = cmd_data.get("description", "")
             command = Command(
                 cli_tool_id=cli_tool.id,
-                name=cmd_data.get("name", ""),
-                description=cmd_data.get("description"),
+                name=cmd_name,
+                description=cmd_desc,
+                is_subcommand=False,
             )
             cli_tool.commands.append(command)
 
-        # Phase 1.5: Build command tree structure and count total commands
-        logger.info("Step 5/7: Building command tree structure...")
-        # A set to track discovered command IDs and prevent cycles
-        discovered_cmds: Set[str] = set()
+        initial_command_count = len(cli_tool.commands)
+        logger.info(f"Added {initial_command_count} top-level commands to analysis")
 
-        # Discovery queue
-        discovery_queue = list(cli_tool.commands)
-        discovery_index = 0
+        # Set maximum commands to analyze if not provided
+        if max_commands is None:
+            # Default to 4x the number of top-level commands, which is a reasonable estimate
+            max_commands = 4 * initial_command_count
 
-        # Discover subcommands without full analysis
-        while discovery_index < len(discovery_queue):
-            command = discovery_queue[discovery_index]
-            discovery_index += 1
+        # Phase 2: Fixed-size command discovery with strict limiting
+        # Track commands by their full command path to avoid duplicates and cycles
+        known_command_paths = set()
+        for cmd in cli_tool.commands:
+            if hasattr(cmd, "name") and getattr(cmd, "name", ""):
+                known_command_paths.add(getattr(cmd, "name", "").lower())
 
-            # Skip if already discovered
-            command_id = getattr(command, "id", None)
-            if command_id and command_id in discovered_cmds:
-                continue
+        logger.debug(
+            f"Step 5/7: Discovering subcommands with strict limit of {max_commands} commands..."
+        )
 
-            if command_id:
-                discovered_cmds.add(command_id)
+        # Perform breadth-first discovery of subcommands with strict limits
+        discovery_queue = list(cli_tool.commands)  # Start with top-level commands
+        commands_analyzed = 0
 
-            logger.debug(f"Discovering command structure: {command.name}")
+        # Track cycles and duplicates for reporting
+        cycles_detected = 0
+        duplicates_detected = 0
 
-            # Build command path for this command
-            cmd_path_parts: List[str] = []
-            curr = command
-            while hasattr(curr, "parent_command_id") and curr.parent_command_id:
-                # Find parent
-                parent = None
-                for cmd in cli_tool.commands:
-                    if hasattr(cmd, "id") and cmd.id == curr.parent_command_id:
-                        parent = cmd
-                        break
+        while discovery_queue and commands_analyzed < max_commands:
+            # Check if we've reached the maximum command count
+            if len(cli_tool.commands) >= max_commands:
+                logger.warning(
+                    f"Reached maximum command limit ({max_commands}), stopping discovery"
+                )
+                break
 
-                if parent and hasattr(parent, "name"):
-                    cmd_path_parts.insert(0, parent.name)
-                    curr = parent
+            # Check timeout
+            if time.time() - start_time > discovery_timeout:
+                logger.warning(f"Discovery phase timed out after {discovery_timeout} seconds")
+                break
+
+            # Get next command to analyze
+            current_command = discovery_queue.pop(0)
+            commands_analyzed += 1
+
+            # Build the command path for this command
+            command_path_parts: List[str] = []
+            cmd = current_command
+
+            # Traverse up the parent chain to build the full path
+            while cmd:
+                if hasattr(cmd, "name") and getattr(cmd, "name", ""):
+                    command_path_parts.insert(0, getattr(cmd, "name", ""))
+
+                # Find parent command
+                parent_id = getattr(cmd, "parent_command_id", None)
+                if parent_id:
+                    parent = None
+                    for potential_parent in cli_tool.commands:
+                        if (
+                            hasattr(potential_parent, "id")
+                            and getattr(potential_parent, "id", "") == parent_id
+                        ):
+                            parent = potential_parent
+                            break
+                    cmd = parent
                 else:
-                    break
+                    cmd = None
 
-            cmd_path = " ".join(cmd_path_parts)
+            # Build full command path
+            command_path = " ".join(command_path_parts)
+            current_cmd_name = getattr(current_command, "name", "")
 
-            # Get help text for this command
             try:
-                cmd_help = self.get_command_help_text(cli_tool.name, command.name, cmd_path)
+                # Get help text for this command to discover subcommands
+                if len(command_path_parts) <= 1:
+                    # Top-level command
+                    help_text = self.get_command_help_text(tool_name, current_cmd_name)
+                else:
+                    # Subcommand - need to extract the immediate parent path
+                    parent_path = " ".join(command_path_parts[:-1])
+                    help_text = self.get_command_help_text(tool_name, current_cmd_name, parent_path)
 
                 # Extract subcommands
-                subcmd_path = command.name
-                if cmd_path:
-                    subcmd_path = f"{cmd_path} {subcmd_path}"
+                subcommands_data = self.extract_commands(f"{tool_name} {command_path}", help_text)
 
-                subcmds_data = self.extract_commands(f"{cli_tool.name} {subcmd_path}", cmd_help)
+                if subcommands_data:
+                    logger.debug(
+                        f"Found {len(subcommands_data)} potential subcommands for '{command_path}'"
+                    )
 
-                # Add subcommands to tree and queue
-                for subcmd_data in subcmds_data:
+                # Process each subcommand
+                for subcmd_data in subcommands_data:
                     subcmd_name = subcmd_data.get("name", "")
-
-                    # Skip if the subcommand name is the same as the parent to avoid cycles
-                    command_name = getattr(command, "name", "")
-                    if subcmd_name.lower() == command_name.lower():
-                        logger.warning(
-                            f"Skipping subcommand {subcmd_name} to avoid cycle with parent command {command_name}"
-                        )
+                    if not subcmd_name:  # Skip empty names
                         continue
 
-                    # Check if this subcommand already exists
-                    existing = None
-                    for cmd in cli_tool.commands:
-                        if (
-                            hasattr(cmd, "name")
-                            and hasattr(cmd, "parent_command_id")
-                            and getattr(cmd, "name", "").lower() == subcmd_name.lower()
-                            and getattr(cmd, "parent_command_id", None) == command_id
-                        ):
-                            existing = cmd
+                    # Build the full path for this subcommand
+                    subcmd_path = f"{command_path} {subcmd_name}".lower()
+
+                    # Skip if this path is already known
+                    if subcmd_path in known_command_paths:
+                        logger.debug(f"Skipping duplicate command path: '{subcmd_path}'")
+                        duplicates_detected += 1
+                        continue
+
+                    # Check for command name appearing multiple times in path (cycle)
+                    parts = subcmd_path.split()
+                    name_counts: Dict[str, int] = {}
+                    has_cycle = False
+
+                    for part in parts:
+                        name_counts[part] = name_counts.get(part, 0) + 1
+                        if name_counts[part] > 1:
+                            has_cycle = True
                             break
 
-                    if not existing:
-                        # Create new subcommand
-                        subcommand = Command(
-                            cli_tool_id=cli_tool.id,
-                            name=subcmd_name,
-                            description=subcmd_data.get("description"),
-                            parent_command_id=command_id,
-                            is_subcommand=True,
+                    if has_cycle:
+                        logger.warning(
+                            f"Skipping subcommand {subcmd_name} to avoid cycle with parent command {current_cmd_name}"
                         )
-                        cli_tool.commands.append(subcommand)
-                        discovery_queue.append(subcommand)
+                        cycles_detected += 1
+                        continue
+
+                    # Check if adding this would exceed our command limit
+                    if len(cli_tool.commands) >= max_commands:
+                        logger.warning(
+                            f"Reached maximum command limit ({max_commands}), stopping discovery"
+                        )
+                        break
+
+                    # Create the subcommand
+                    subcommand = Command(
+                        cli_tool_id=cli_tool.id,
+                        name=subcmd_name,
+                        description=subcmd_data.get("description"),
+                        parent_command_id=getattr(current_command, "id", ""),
+                        is_subcommand=True,
+                    )
+
+                    # Add to CLI tool and queue for BFS traversal
+                    cli_tool.commands.append(subcommand)
+                    discovery_queue.append(subcommand)
+
+                    # Mark this path as known
+                    known_command_paths.add(subcmd_path)
+
+                    logger.debug(f"Added subcommand: '{subcmd_path}'")
+
             except Exception as e:
-                logger.warning(
-                    f"Error discovering subcommands for {getattr(command, 'name', 'unknown')}: {str(e)}"
+                logger.warning(f"Error discovering subcommands for '{command_path}': {str(e)}")
+
+            # Periodically report progress
+            if commands_analyzed % 5 == 0 or len(cli_tool.commands) % 5 == 0:
+                discovery_percent = min(100.0, (len(cli_tool.commands) / max_commands) * 100)
+                logger.info(
+                    f"Discovery progress: Analyzed {commands_analyzed} commands, "
+                    f"found {len(cli_tool.commands)}/{max_commands} total commands ({discovery_percent:.1f}%)"
                 )
 
-        # Count total commands for accurate progress reporting
+        # Generate discovery report
         total_commands = len(cli_tool.commands)
-        logger.info(f"Discovered {total_commands} total commands in command tree")
+        elapsed_time = time.time() - start_time
 
-        # Phase 2: Analyze each command with detailed information
-        logger.info("Step 6/7: Analyzing detailed command information...")
-        processed_commands: Set[str] = set()  # Track processed commands to prevent cycles
+        logger.info(f"Command discovery statistics for {tool_name}:")
+        logger.info(f"  - Initial top-level commands: {initial_command_count}")
+        logger.info(f"  - Total commands found: {total_commands}")
+        logger.info(f"  - Commands analyzed during discovery: {commands_analyzed}")
+        logger.info(f"  - Maximum command limit: {max_commands}")
+        logger.info(f"  - Cycles detected and avoided: {cycles_detected}")
+        logger.info(f"  - Duplicates skipped: {duplicates_detected}")
+        logger.info(f"  - Discovery time: {elapsed_time:.2f} seconds")
 
-        for i, command in enumerate(cli_tool.commands):
-            logger.info(
-                f"Analyzing command {i + 1}/{total_commands}: {getattr(command, 'name', 'unknown')}"
+        # Phase 3: Detailed analysis of each discovered command
+        logger.debug("Step 6/7: Analyzing command details...")
+
+        # Process each command once with tracking to avoid redundant processing
+        processed_commands = set()
+        expected_command_count = len(cli_tool.commands)
+
+        logger.info(f"Beginning detailed analysis of {expected_command_count} commands")
+
+        # Process only up to the number of commands discovered in Phase 2
+        commands_to_process = cli_tool.commands[:expected_command_count]
+
+        for i, command in enumerate(commands_to_process):
+            # Skip if already processed (avoid double-processing)
+            command_id = getattr(command, "id", "")
+            if command_id and command_id in processed_commands:
+                logger.debug(
+                    f"Skipping already processed command: {getattr(command, 'name', 'unknown')}"
+                )
+                continue
+
+            # Mark as processed before updating
+            if command_id:
+                processed_commands.add(command_id)
+
+            # Report progress (showing X/Y where Y is the expected total)
+            progress_pct = (i + 1) / expected_command_count * 100
+            logger.info(f"Analyzed {i + 1}/{expected_command_count} commands ({progress_pct:.1f}%)")
+
+            try:
+                # Update detailed command information
+                logger.debug(f"Updating command info: {getattr(command, 'name', 'unknown')}")
+                self.update_command_info(command, processed_commands)
+            except Exception as e:
+                logger.error(
+                    f"Error updating command {getattr(command, 'name', 'unknown')}: {str(e)}"
+                )
+
+        # If we somehow ended up with more commands than expected, log a warning
+        if len(cli_tool.commands) > expected_command_count:
+            logger.warning(
+                f"Command count increased during detailed analysis: {len(cli_tool.commands)} > {expected_command_count}"
             )
-            self.update_command_info(command, processed_commands)
+            # Truncate commands to the expected count to prevent potential infinite loops
+            cli_tool.commands = cli_tool.commands[:expected_command_count]
 
-        # Clean up duplicate commands with different capitalization
-        logger.info("Step 7/7: Cleaning up and finalizing analysis...")
+        # Clean up duplicate commands
+        logger.debug("Step 7/7: Cleaning up and finalizing analysis...")
         self._clean_up_duplicate_commands(cli_tool)
 
-        # Count total commands including subcommands
+        # Calculate final statistics
         top_level_count = 0
         subcommand_count = 0
+
         for cmd in cli_tool.commands:
-            if not hasattr(cmd, "is_subcommand") or not getattr(cmd, "is_subcommand", False):
+            if not getattr(cmd, "is_subcommand", False):
                 top_level_count += 1
             else:
                 subcommand_count += 1
 
+        total_elapsed_time = time.time() - start_time
         logger.info(
-            f"Analysis complete! Found {top_level_count} top-level commands and {subcommand_count} subcommands"
+            f"Analysis complete in {total_elapsed_time:.2f} seconds! "
+            f"Tool {tool_name} has {top_level_count} top-level commands and {subcommand_count} subcommands, "
+            f"total: {len(cli_tool.commands)}"
         )
+
         return cli_tool
 
     def _clean_up_duplicate_commands(self, cli_tool: CLITool) -> None:

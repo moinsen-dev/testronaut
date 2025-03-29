@@ -11,6 +11,72 @@ class CLIAnalysisPrompts:
     """Collection of prompts for CLI tool and command analysis."""
 
     @staticmethod
+    def tool_purpose_analysis(
+        tool_name: str,
+        help_text: str,
+    ) -> str:
+        """
+        Generate a prompt for analyzing the overall purpose of a CLI tool.
+
+        Args:
+            tool_name: The name of the CLI tool.
+            help_text: The help text of the tool.
+
+        Returns:
+            A prompt string for the LLM.
+        """
+        return f"""
+        Based on the following help text for the CLI tool '{tool_name}', provide comprehensive
+        information about this tool's purpose, background, and testing considerations.
+
+        Your analysis should include:
+
+        1. Purpose: What is the main purpose of this tool? What problem does it solve?
+        2. Background: What technical context is important to understand this tool?
+        3. Use Cases: What are the most common use cases for this tool?
+        4. Testing Considerations: What should be considered when testing this tool?
+
+        Help text:
+        ```
+        {help_text[:3000]}  # Limiting to 3000 chars to avoid token limits
+        ```
+        """
+
+    @staticmethod
+    def subcommand_purpose_analysis(
+        tool_name: str,
+        command_name: str,
+        help_text: str,
+    ) -> str:
+        """
+        Generate a prompt for analyzing the purpose of a specific subcommand.
+
+        Args:
+            tool_name: The name of the CLI tool.
+            command_name: The name of the command.
+            help_text: The help text of the command.
+
+        Returns:
+            A prompt string for the LLM.
+        """
+        return f"""
+        Based on the following help text for the command '{tool_name} {command_name}', provide
+        a clear, detailed explanation of this command's specific purpose.
+
+        Your analysis should include:
+
+        1. Purpose: What is the specific purpose of this command within the overall tool?
+        2. Relationship: How does this command relate to other commands in the tool?
+        3. Typical Usage: When and why would someone use this specific command?
+        4. Testing Focus: What aspects of this command should testing focus on?
+
+        Help text:
+        ```
+        {help_text[:3000]}  # Limiting to 3000 chars to avoid token limits
+        ```
+        """
+
+    @staticmethod
     def command_purpose_analysis(
         command_name: str,
         help_text: str,
