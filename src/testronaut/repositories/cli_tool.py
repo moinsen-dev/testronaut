@@ -5,7 +5,7 @@ This module provides repository implementations for CLI Tool related models,
 including tools, commands, options, arguments, and examples.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlmodel import Session, select
 
@@ -16,6 +16,7 @@ from testronaut.models.cli_tool import (
     add_relationship_analysis,
     add_semantic_analysis,
 )
+from testronaut.utils.version import requires_reanalysis
 
 
 class CLIToolRepository(Repository[CLITool]):
@@ -97,8 +98,47 @@ class CLIToolRepository(Repository[CLITool]):
 
             return tool_with_relations
 
+    def check_analysis_needed(
+        self, name: str, version: Optional[str] = None
+    ) -> Tuple[bool, Optional[CLITool]]:
+        """
+        Check if a CLI tool needs to be analyzed based on version.
+
+        This method compares the current version with the stored version
+        to determine if reanalysis is needed based on semantic versioning rules.
+
+        Args:
+            name: The name of the CLI tool
+            version: The current version of the tool (optional)
+
+        Returns:
+            A tuple of (needs_analysis, existing_tool)
+            - needs_analysis: True if analysis is needed, False otherwise
+            - existing_tool: The existing tool if found, None otherwise
+        """
+        # Get existing tool if any
+        existing_tool = self.get_by_name(name)
+
+        # If tool doesn't exist, analysis is needed
+        if not existing_tool:
+            return True, None
+
+        # If version is not provided, reanalyze
+        if not version:
+            return True, existing_tool
+
+        # If existing tool doesn't have a version, reanalyze
+        if not existing_tool.version:
+            return True, existing_tool
+
+        # Compare versions to determine if reanalysis is needed
+        return requires_reanalysis(existing_tool.version, version), existing_tool
+
     def save_analysis_results(
-        self, cli_tool: CLITool, semantic_analysis: Optional[Dict[str, Any]] = None
+        self,
+        cli_tool: CLITool,
+        semantic_analysis: Optional[Dict[str, Any]] = None,
+        force_update: bool = False,
     ) -> CLITool:
         """
         Save a complete CLI tool analysis including all related entities.
@@ -109,12 +149,17 @@ class CLIToolRepository(Repository[CLITool]):
         Args:
             cli_tool: The CLI tool with its complete object graph
             semantic_analysis: Optional semantic analysis data
+            force_update: Force update even if reanalysis is not needed
 
         Returns:
             The saved CLI tool with IDs
         """
-        # Check if the CLI tool already exists
-        existing_tool = self.get_by_name(cli_tool.name)
+        # Check if the CLI tool already exists and if reanalysis is needed
+        needs_analysis, existing_tool = self.check_analysis_needed(cli_tool.name, cli_tool.version)
+
+        # If no reanalysis is needed and we're not forcing it, return the existing tool
+        if not needs_analysis and not force_update and existing_tool:
+            return existing_tool
 
         with Session(engine) as session:
             if existing_tool:
@@ -130,10 +175,19 @@ class CLIToolRepository(Repository[CLITool]):
             if semantic_analysis:
                 add_relationship_analysis(cli_tool, semantic_analysis)
 
+            # Convert MetaData object to dict before saving
+            if cli_tool.meta_data:
+                # Use model_dump for SQLModel/Pydantic objects
+                cli_tool.meta_data = cli_tool.meta_data.model_dump(mode='json')
+
             # Save the tool and all related entities
             session.add(cli_tool)
             session.commit()
             session.refresh(cli_tool)
+
+            # Eagerly load the commands relationship within the session
+            # before returning the detached object.
+            _ = cli_tool.commands
 
             return cli_tool
 

@@ -12,7 +12,11 @@ import typer
 from rich import print as rprint
 from rich.console import Console
 
-from testronaut.cli.commands import analyze, generate, report, verify
+# Import the specific app instances from the command modules
+from testronaut.cli.commands.analyze_commands import analyze_app
+from testronaut.cli.commands.generate import app as generate_app # Renaming import
+from testronaut.cli.commands.report import app as report_app # Renaming import
+from testronaut.cli.commands.verify import verify_app
 
 # Create Typer app
 app = typer.Typer(
@@ -86,11 +90,11 @@ def callback(
         output_dir.mkdir(parents=True)
 
 
-# Add subcommands
-app.add_typer(analyze.app, name="analyze", help="Analyze CLI tool and generate test plan")
-app.add_typer(generate.app, name="generate", help="Execute tests and generate expected results")
-app.add_typer(verify.app, name="verify", help="Execute tests and verify against expected results")
-app.add_typer(report.app, name="report", help="Generate test report from results")
+# Add subcommands using the imported app instances
+app.add_typer(analyze_app, name="analyze", help="Analyze CLI tool and generate test plan")
+app.add_typer(generate_app, name="generate", help="Execute tests and generate expected results")
+app.add_typer(verify_app, name="verify", help="Execute tests and verify against expected results")
+app.add_typer(report_app, name="report", help="Generate test report from results")
 
 
 def print_banner():
