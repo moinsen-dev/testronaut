@@ -13,7 +13,8 @@ from huggingface_hub import hf_hub_download
 # Import the specific error from the correct submodule
 from huggingface_hub.errors import HfHubHTTPError
 
-from testronaut.config import settings
+# Import the function to access the settings singleton
+from testronaut.config import get_settings
 from testronaut.utils.errors import LLMServiceError
 
 
@@ -26,6 +27,8 @@ def get_models_dir() -> Path:
     Returns:
         Path object representing the models directory.
     """
+    # Get the settings singleton instance
+    settings = get_settings()
     # Use the main config directory from settings and add '/models'
     models_dir = settings.config_path / "models"
     models_dir.mkdir(parents=True, exist_ok=True)

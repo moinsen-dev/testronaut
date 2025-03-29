@@ -1,171 +1,72 @@
 """
-Structured logging module for Testronaut.
+Structured Logging Package for Testronaut.
 
-This module provides context-aware structured logging for the Testronaut application.
+Provides context-aware structured logging using structlog and Rich.
+
+Key components:
+- `get_logger`: Retrieves a logger instance bound with current context.
+- `configure_logging`: Sets up logging level, format, and optional file output.
+- `RequestContext`: Context manager for adding request-specific context to logs.
+- `set_context`, `clear_context`, `get_context`: Functions for manual context management.
 """
-import json
-import logging
-import os
-import sys
-import uuid
-from datetime import datetime
-from typing import Any, Dict, Optional
 
 import structlog
-from rich.console import Console
-from rich.logging import RichHandler
+from typing import Any
 
-# Configure structlog
-structlog.configure(
-    processors=[
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-        structlog.processors.UnicodeDecoder(),
-        structlog.processors.JSONRenderer(),
-    ],
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    wrapper_class=structlog.stdlib.BoundLogger,
-    cache_logger_on_first_use=True,
+# Import context management utilities
+from .context import (
+    RequestContext,
+    clear_context,
+    get_context,
+    set_context,
+    _request_context, # Import the internal context dict for get_logger
 )
 
-# Configure standard logging
-logging.basicConfig(
-    level=os.environ.get("TESTRONAUT_LOG_LEVEL", "INFO"),
-    format="%(message)s",
-    datefmt="[%X]",
-    handlers=[RichHandler(rich_tracebacks=True, console=Console(stderr=True))],
-)
+# Import setup/configuration functions
+from .setup import configure_logging, add_file_handler
 
-# Create a global request context
-_request_context: Dict[str, Any] = {}
-
+# --- Core Logger Retrieval ---
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     """
-    Get a logger instance with the given name.
+    Get a logger instance bound with global context.
+
+    Retrieves a structlog logger and automatically binds any key-value pairs
+    currently stored in the global logging context (managed by `set_context`,
+    `clear_context`, or `RequestContext`).
 
     Args:
-        name: The logger name, typically __name__
+        name: The logger name, typically `__name__` of the calling module.
 
     Returns:
-        A configured structlog logger
+        A configured structlog logger instance ready for use.
     """
+    # Retrieve the base logger instance
     logger = structlog.get_logger(name)
 
-    # Add global context if present
-    if _request_context:
-        logger = logger.bind(**_request_context)
+    # Bind the current global context to this logger instance
+    # This ensures logs created with this instance include the context
+    current_ctx = get_context() # Use the function to get a copy
+    if current_ctx:
+        logger = logger.bind(**current_ctx)
 
     return logger
 
 
-def set_context(key: str, value: Any) -> None:
-    """
-    Set a value in the global context.
+# --- Public API ---
+# Define what gets imported when using 'from testronaut.utils.logging import *'
+__all__ = [
+    "get_logger",
+    "configure_logging",
+    "add_file_handler",
+    "RequestContext",
+    "set_context",
+    "clear_context",
+    "get_context",
+]
 
-    Args:
-        key: The context key
-        value: The context value
-    """
-    _request_context[key] = value
-
-
-def clear_context() -> None:
-    """Clear the global context."""
-    _request_context.clear()
-
-
-def get_context() -> Dict[str, Any]:
-    """
-    Get the current global context.
-
-    Returns:
-        The current context dictionary
-    """
-    return _request_context.copy()
-
-
-class RequestContext:
-    """Context manager for request-specific logging context."""
-
-    def __init__(self, **kwargs):
-        """
-        Initialize the context with key-value pairs.
-
-        Args:
-            **kwargs: Context key-value pairs
-        """
-        self.context = kwargs
-        self.context.setdefault("request_id", str(uuid.uuid4()))
-        self.context.setdefault("timestamp", datetime.utcnow().isoformat())
-        self.previous_context = {}
-
-    def __enter__(self):
-        """Save the current context and set the new one."""
-        self.previous_context = get_context()
-        for key, value in self.context.items():
-            set_context(key, value)
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Restore the previous context."""
-        clear_context()
-        for key, value in self.previous_context.items():
-            set_context(key, value)
-        return False  # Don't suppress exceptions
-
-
-def log_to_file(filename: str, level: str = "INFO") -> None:
-    """
-    Add a file handler to the root logger.
-
-    Args:
-        filename: The log file path
-        level: The log level for the file handler
-    """
-    handler = logging.FileHandler(filename)
-    handler.setLevel(getattr(logging, level))
-    formatter = logging.Formatter("%(message)s")
-    handler.setFormatter(formatter)
-    logging.getLogger().addHandler(handler)
-
-
-def configure_logging(
-    level: str = "INFO",
-    log_file: Optional[str] = None,
-    json_output: bool = False
-) -> None:
-    """
-    Configure logging settings.
-
-    Args:
-        level: The log level
-        log_file: Optional file to write logs to
-        json_output: Whether to output logs as JSON
-    """
-    # Set log level
-    logging.getLogger().setLevel(getattr(logging, level))
-
-    # Add file handler if needed
-    if log_file:
-        log_to_file(log_file, level)
-
-    # Configure structlog for JSON output if needed
-    if json_output:
-        structlog.configure(
-            processors=[
-                structlog.stdlib.add_log_level,
-                structlog.stdlib.PositionalArgumentsFormatter(),
-                structlog.processors.TimeStamper(fmt="iso"),
-                structlog.processors.StackInfoRenderer(),
-                structlog.processors.format_exc_info,
-                structlog.processors.UnicodeDecoder(),
-                structlog.processors.JSONRenderer(),
-            ],
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            wrapper_class=structlog.stdlib.BoundLogger,
-            cache_logger_on_first_use=True,
-        )
+# Note: Initial logging configuration (like basicConfig or structlog.configure)
+# is now handled within the `setup.py` module, specifically by the
+# `configure_logging` function. The application should call `configure_logging`
+# early in its startup process to apply desired settings. A basic default
+# might be applied by setup.py if needed, but explicit configuration is preferred.

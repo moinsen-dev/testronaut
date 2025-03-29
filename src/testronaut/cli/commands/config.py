@@ -23,7 +23,7 @@ from testronaut.config import (
     initialize_config,
     load_config_file,
     save_config_file,
-    settings as global_settings, # Use the singleton settings for loading/saving state
+    # Removed 'settings as global_settings' - use get_settings() if singleton needed
 )
 from testronaut.llm.utils import download_gguf_model, get_models_dir
 from testronaut.utils.errors import ConfigurationError, LLMServiceError
@@ -187,7 +187,12 @@ def llm_add(
     try:
         config_dict = _load_current_config()
         llama_settings = _get_llama_cpp_settings(config_dict)
-        registered_models: List[Dict[str, Any]] = llama_settings.get("registered_models", [])
+        # Initialize as empty list, then update if value exists
+        registered_models: List[Dict[str, Any]] = []
+        registered_models_raw = llama_settings.get("registered_models")
+        if registered_models_raw is not None:
+            registered_models = registered_models_raw # Assume it's the correct type if not None
+
 
         repo_id: Optional[str] = None
         filename: Optional[str] = None
@@ -288,11 +293,15 @@ def llm_add(
         # Determine registration name
         reg_name = name if name else Path(filename).stem # Use filename stem if name not provided
 
-        # Check for conflicts
-        if any(m["name"] == reg_name for m in registered_models):
+        # Add assertion to help type checker confirm registered_models is a list
+        assert isinstance(registered_models, list)
+
+        # Check for conflicts (using .get() for robustness with dict keys)
+        if any(m.get("name") == reg_name for m in registered_models):
             console.print(f"[bold red]Error:[/bold red] A model with the name '{reg_name}' is already registered.")
             return 1
-        if any(Path(m["path"]) == local_path for m in registered_models):
+        # Revert to any() and ignore persistent Pylance warning (likely false positive)
+        if any(Path(m.get("path", "")) == local_path for m in registered_models): # type: ignore
             console.print(f"[bold red]Error:[/bold red] The model path '{local_path}' is already registered under a different name.")
             return 1
 
