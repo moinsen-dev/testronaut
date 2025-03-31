@@ -159,7 +159,7 @@ pytest==8.3.5
     #   pytest-cov
 pytest-cov==6.0.0
     # via testronauting (pyproject.toml)
-python-dotenv==1.0.1
+python-dotenv==1.1.0
     # via
     #   pydantic-settings
     #   uvicorn
