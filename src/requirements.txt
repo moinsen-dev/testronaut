@@ -32,7 +32,7 @@ click==8.1.8
     # via
     #   typer
     #   uvicorn
-coverage==7.7.1
+coverage==7.8.0
     # via pytest-cov
 dataclasses-json==0.6.7
     # via langchain-community
