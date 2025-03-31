@@ -181,7 +181,7 @@ requests==2.32.3
     #   tiktoken
 requests-toolbelt==1.0.0
     # via langsmith
-rich==13.9.4
+rich==14.0.0
     # via
     #   testronauting (pyproject.toml)
     #   typer

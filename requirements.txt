@@ -95,7 +95,7 @@ requests==2.32.3
     # via
     #   testronaut (pyproject.toml)
     #   huggingface-hub
-rich==13.9.4
+rich==14.0.0
     # via
     #   testronaut (pyproject.toml)
     #   textual
