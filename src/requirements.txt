@@ -136,7 +136,7 @@ propcache==0.3.0
     # via
     #   aiohttp
     #   yarl
-pydantic==2.10.6
+pydantic==2.11.1
     # via
     #   testronauting (pyproject.toml)
     #   anthropic
