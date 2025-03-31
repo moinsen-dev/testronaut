@@ -95,7 +95,7 @@ langchain-openai==0.3.9
     # via testronauting (pyproject.toml)
 langchain-text-splitters==0.3.7
     # via langchain
-langsmith==0.3.18
+langsmith==0.3.20
     # via
     #   langchain
     #   langchain-community
