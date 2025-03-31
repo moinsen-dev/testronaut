@@ -62,7 +62,7 @@ mdit-py-plugins==0.4.2
     # via markdown-it-py
 mdurl==0.1.2
     # via markdown-it-py
-openai==1.69.0
+openai==1.70.0
     # via testronaut (pyproject.toml)
 packaging==24.2
     # via huggingface-hub
